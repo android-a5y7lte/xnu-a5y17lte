@@ -232,6 +232,22 @@ menu "Device Support"
 		help
 		  Say Y if you want to include support for Samsung Galaxy A3 (2016)
 
+	config SAMSUNG_A5Y17LTE
+		bool "Support for Samsung Galaxy A5 (2017)"
+		default n
+		depends on EXYNOS_7880
+		help
+		  Say Y if you want to include support for Samsung Galaxy A5 (2017)
+
+	config A5Y17LTE_DIAG_HALT
+		bool "a5y17lte: print platform diagnostics and halt"
+		default y
+		depends on SAMSUNG_A5Y17LTE
+		help
+		  Print CPU, timer and display registers on screen, then halt
+		  instead of booting a payload. Used to prove the platform
+		  before an XNU payload exists.
+
 	config SAMSUNG_A71
 		bool "Support for Samsung Galaxy A71"
 		default n
