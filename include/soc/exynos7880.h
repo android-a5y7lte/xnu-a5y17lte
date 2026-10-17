@@ -15,6 +15,27 @@
 #define DECON_F_BASE		0x14830000
 #define HW_SW_TRIG_CONTROL	0x70	/* regs-decon.h:92 */
 #define DECON_WIN_CONTROL(w)	(0x130 + ((w) * 0x20))	/* regs-decon.h:177 */
+#define SHADOW_REG_UPDATE_REQ	0x60	/* regs-decon.h:85 */
+
+/* HW_SW_TRIG_CONTROL bits (regs-decon.h:93-99) */
+#define TRIG_AUTO_MASK_TRIG	(1 << 12)
+#define TRIG_SW_TRIG		(1 << 8)
+#define TRIG_HW_TRIG_MASK	(1 << 5)
+#define TRIG_HW_TRIG_EN		(1 << 4)
+
+/*
+ * a5y17lte panel is MIPI command mode with hardware (TE) trigger
+ * (exynos7880.dtsi decon_f: psr_mode = <2>, trig_mode = <0>), so the
+ * panel only refreshes when DECON is triggered. We use software
+ * trigger: one frame per kick.
+ */
+#define DECON_SW_TRIG_IDLE	(TRIG_AUTO_MASK_TRIG)
+#define DECON_SW_TRIG_FIRE	(TRIG_AUTO_MASK_TRIG | TRIG_SW_TRIG)
+
+/* PMU (dtsi: system-controller@106B0000); software reset at +0x400
+ * (S5E7880-pmusfr.h:161, exynos-reboot.c:72,299: write 1) */
+#define PMU_BASE		0x106B0000
+#define PMU_SWRESET		0x400
 
 /* Display DMA channels (dtsi: idma_g0..g2, idma_vg0..) */
 #define IDMA_G0_BASE		0x14821000

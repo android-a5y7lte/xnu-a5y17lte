@@ -18,6 +18,7 @@
 #include <drivers/framework.h>
 #include <lib/simplefb.h>
 #include <lib/debug.h>
+#include <lib/console.h>
 #include <soc/exynos7880.h>
 
 #define A5Y17LTE_FB_BASE	0x67000000
@@ -40,10 +41,43 @@ static void print_reg64(const char *name, uint64_t v)
 	       (unsigned int)(v >> 32), (unsigned int)(v & 0xffffffff));
 }
 
+static inline void wr32(uintptr_t addr, uint32_t v)
+{
+	*(volatile uint32_t *)addr = v;
+}
+
+static uint64_t timer_freq(void)
+{
+	uint64_t f = READ_SYSREG(CNTFRQ_EL0);
+	return f ? f : 26000000;	/* dtsi: arm,armv8-timer 26 MHz */
+}
+
+static void delay_ms(uint64_t ms)
+{
+	uint64_t start = READ_SYSREG(CNTPCT_EL0);
+	uint64_t ticks = timer_freq() / 1000 * ms;
+
+	while (READ_SYSREG(CNTPCT_EL0) - start < ticks)
+		;
+}
+
+/*
+ * Push the framebuffer to the command-mode panel: one software-
+ * triggered frame. Without this the panel keeps showing the S-Boot
+ * logo from its own memory (step 1 hardware result, 2026-10-18).
+ */
+static void decon_kick(void)
+{
+	__asm__ volatile("dsb sy" ::: "memory");
+	wr32(DECON_F_BASE + HW_SW_TRIG_CONTROL, DECON_SW_TRIG_IDLE);
+	wr32(DECON_F_BASE + HW_SW_TRIG_CONTROL, DECON_SW_TRIG_FIRE);
+	delay_ms(20);	/* one 60 Hz frame is ~16.7 ms */
+}
+
 int a5y17lte_init(void)
 {
-	/* Allow framebuffer to be written to */
-	*(volatile int*) (DECON_F_BASE + HW_SW_TRIG_CONTROL) = 0x1281;
+	/* Switch DECON to software trigger so we decide when frames go out */
+	wr32(DECON_F_BASE + HW_SW_TRIG_CONTROL, DECON_SW_TRIG_IDLE);
 	return 0;
 }
 
@@ -78,9 +112,33 @@ static void draw_colour_bars(void)
 			fb[y * A5Y17LTE_FB_WIDTH + x] = bars[x / bar_w];
 }
 
+/* Runs after the framebuffer console for every printk line */
+static void kick_console_write(int level, const char *prefix, const char *msg)
+{
+	(void)level; (void)prefix; (void)msg;
+	decon_kick();
+}
+
+static const struct console kick_console = {
+	.write = kick_console_write,
+};
+
+#define A5Y17LTE_RESET_AFTER_S	30
+
+static void pmu_reset(void)
+{
+	__asm__ volatile("dsb sy" ::: "memory");
+	wr32(PMU_BASE + PMU_SWRESET, 1);
+	for (;;)
+		__asm__ volatile("wfe");
+}
+
 static int a5y17lte_diag(void)
 {
 	uint64_t el = (READ_SYSREG(CurrentEL) >> 2) & 3;
+
+	console_register(&kick_console);
+	decon_kick();	/* show the splash printed before late_init */
 
 	printk(KERN_NOTICE, "=== a5y17lte step 1 diagnostics ===\n");
 	printk(KERN_INFO, "CurrentEL = EL%d\n", (int)el);
@@ -104,6 +162,7 @@ static int a5y17lte_diag(void)
 	printk(KERN_INFO, "fb @ 0x%08x %dx%d (bars: R G B W)\n",
 	       A5Y17LTE_FB_BASE, A5Y17LTE_FB_WIDTH, A5Y17LTE_FB_HEIGHT);
 	draw_colour_bars();
+	decon_kick();
 
 	printk(KERN_INFO, "DECON TRIG = 0x%08x\n",
 	       rd32(DECON_F_BASE + HW_SW_TRIG_CONTROL));
@@ -119,12 +178,16 @@ static int a5y17lte_diag(void)
 		       rd32(base + VG_BASE_ADDR_Y(0)));
 	}
 
-	printk(KERN_NOTICE, "=== step 1 complete: halted ===\n");
-	printk(KERN_NOTICE, "Hold Vol Down + Power ~7s to reboot\n");
+	printk(KERN_NOTICE, "=== step 1b complete ===\n");
+	printk(KERN_NOTICE, "Auto reboot in %d s (proof the code ran)\n",
+	       A5Y17LTE_RESET_AFTER_S);
 
-	for (;;)
-		__asm__ volatile("wfe");
+	for (int i = 0; i < A5Y17LTE_RESET_AFTER_S * 10; i++) {
+		decon_kick();
+		delay_ms(80);
+	}
 
+	pmu_reset();
 	return 0;
 }
 #endif
