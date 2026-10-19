@@ -1322,3 +1322,17 @@ is never reset. Checked with busybox under qemu: `sh -n` and the screen
 emulator (both copies render, letters legible). Image
 `out/a5y17lte-mainline-m5e-boot.img`, sha256 `2156feb8149ad1b6512cb7319f821c95144521947a0911243cc0bb87b3b0a9c8 (built from commit 2980aa8; the build time stamp comes from the HEAD commit, so rebuilding at a later commit gives other bytes)` (14,626,832 B), replacing
 `2cd79c35…`.
+
+Fifth version (Jimmy: same colours, about half the size again, and the label
+`KERNEL ALIVE` renamed `KERNEL MODE`): each copy is 4 rows (was 7): a Tux 10
+pixels wide at 1 console cell per pixel (head with two eye holes, yellow beak,
+flippers with a hollow belly, yellow feet) and the label on one line beside
+it, at the face row, in plain bright white text on a green (`KERNEL MODE`) or
+red (`RESCUE MODE`) bar, about 36 columns wide in all. The 3x5 block letters
+are gone (5 rows tall, too big for 4 rows), so the label is now ordinary
+console text, not block letters. Layout otherwise unchanged: a copy at rows
+1-4 right after the clear, one pinned at rows 57-60, the log in a scroll
+region (rows 1-56) that is never reset. Checked with busybox under qemu: `sh
+-n` and the screen emulator (both copies render). Image
+`out/a5y17lte-mainline-m5e-boot.img`, sha256 `88aa19ce34967cd6b200f55e5a5eaf524d1750e4e7db5b46f4dd770f904593c8` (14626832 B), built at commit
+869f03c (the build time stamp comes from the HEAD commit), replacing `2156feb8…`.
