@@ -1306,3 +1306,19 @@ penguin). Checked with busybox under qemu: `sh -n`, a screen emulator
 rendering both copies (widest column 64 of 67; drawing takes about 0.8 s under
 qemu, so far less on the phone). Image `out/a5y17lte-mainline-m5e-boot.img`,
 sha256 `2cd79c35dc22e0e48ad3049b1b2e2c0831ebdce26aa768ffd92d839adbeca4eb` (14,626,832 B), replacing `661b68aa…`.
+
+Phone result for the third version: penguin, colours and the `KERNEL ALIVE`
+text look right, but each copy (13 rows) takes too much of the screen. A
+garbled a5-diag info block in one photo was a frame caught mid-update (Jimmy),
+not a bug.
+
+Fourth version: each copy is 7 rows (was 13): Tux 12 pixels wide at 1 console
+cell per pixel (head, two eye holes, yellow beak, flippers, hollow belly,
+yellow feet) and the label on one line beside it in 3x5 block letters (5 rows,
+vertically centred), `KERNEL ALIVE` green or `RESCUE MODE` red, about 62
+columns wide in all. Same layout otherwise: a copy at rows 1-7 right after the
+clear, one pinned at rows 54-60, the log in a scroll region (rows 1-52) that
+is never reset. Checked with busybox under qemu: `sh -n` and the screen
+emulator (both copies render, letters legible). Image
+`out/a5y17lte-mainline-m5e-boot.img`, sha256 `574e18c6d948201af626cc8029c7665cf87dc3eea8b4081184fd8c2108c6c83f` (14,626,832 B), replacing
+`2cd79c35…`.

@@ -27,8 +27,8 @@ mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
 # Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
-# 1080x1920). A banner is a pixel-art Tux (2 cells per pixel, 13 rows) with
-# the label in block letters to its right, vertically centred; a lit pixel is
+# 1080x1920). A banner is a pixel-art Tux (1 cell per pixel, 12x7) with
+# the label in 3x5 block letters to its right, vertically centred; a lit pixel is
 # a space with a coloured background (the font has no block glyphs). One copy
 # is drawn at the top when init starts (it scrolls away with the log), one is
 # pinned at the bottom: the log scrolls in a region above it, and the region
@@ -39,24 +39,24 @@ hostname a5y17lte
 COLS=67
 ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
 [ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
-BH=13		# banner height in rows
+BH=7		# banner height in rows
 
 glyph() {	# char -> g = 5 rows of bits, space separated
 	case $1 in
-	A) g="0110 1001 1111 1001 1001";;
-	C) g="0111 1000 1000 1000 0111";;
-	D) g="1110 1001 1001 1001 1110";;
-	E) g="1111 1000 1110 1000 1111";;
+	A) g="010 101 111 101 101";;
+	C) g="011 100 100 100 011";;
+	D) g="110 101 101 101 110";;
+	E) g="111 100 110 100 111";;
 	I) g="111 010 010 010 111";;
-	K) g="1001 1010 1100 1010 1001";;
-	L) g="1000 1000 1000 1000 1111";;
-	M) g="10001 11011 10101 10001 10001";;
-	N) g="1001 1101 1011 1001 1001";;
-	O) g="0110 1001 1001 1001 0110";;
-	R) g="1110 1001 1110 1010 1001";;
-	S) g="0111 1000 0110 0001 1110";;
-	U) g="1001 1001 1001 1001 0110";;
-	V) g="10001 10001 01010 01010 00100";;
+	K) g="101 101 110 101 101";;
+	L) g="100 100 100 100 111";;
+	M) g="101 111 111 101 101";;
+	N) g="101 111 111 111 101";;
+	O) g="010 101 101 101 010";;
+	R) g="110 101 110 101 101";;
+	S) g="011 100 010 001 110";;
+	U) g="101 101 101 101 111";;
+	V) g="101 101 101 101 010";;
 	*) g="00 00 00 00 00";;
 	esac
 }
@@ -87,58 +87,50 @@ textwidth() {	# word -> columns (glyph widths plus one gap each)
 	echo $w
 }
 
-# Tux, 14 pixels wide: G body, B beak and feet, . empty (eyes and belly are
+# Tux, 12 pixels wide: G body, B beak and feet, . empty (eyes and belly are
 # empty holes in the body)
-TUXW=28
-pixline() {	# pixel row, body background code -> 2 cells per pixel
+TUXW=12
+pixline() {	# pixel row, body background code -> 1 cell per pixel
 	local r=$1 body beak out= c
-	body=$(printf '\033[%sm  \033[0m' "$2")
-	beak=$(printf '\033[43m  \033[0m')
+	body=$(printf '\033[%sm \033[0m' "$2")
+	beak=$(printf '\033[43m \033[0m')
 	while [ -n "$r" ]; do
 		c=${r%"${r#?}"}; r=${r#?}
 		case $c in
 		G) out="$out$body";;
 		B) out="$out$beak";;
-		*) out="$out  ";;
+		*) out="$out ";;
 		esac
 	done
 	printf '%s' "$out"
 }
 
-draw_banner() {	# first row, colour (red|green), word1, word2
-	local row=$1 bg=42 w1=$3 w2=$4 i=1 pl ban= x0 tw lw lab
+draw_banner() {	# first row, colour (red|green), label
+	local row=$1 bg=42 word=$3 i=1 pl ban= x0 tw lab
 	[ "$2" = red ] && bg=41
-	tw=$(textwidth "$w1"); lw=$(textwidth "$w2")
-	[ $lw -gt $tw ] && tw=$lw
+	tw=$(textwidth "$word")
 	x0=$(( (COLS - TUXW - 3 - tw) / 2 ))
 	while read -r pl; do
 		lab=
 		case $i in
-		[2-6]) lab=$(textrow "$w1" $((i - 1)) $bg);;
-		[8-9]|1[0-2]) lab=$(textrow "$w2" $((i - 7)) $bg);;
+		[2-6]) lab=$(textrow "$word" $((i - 1)) $bg);;
 		esac
 		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH' $((row + i - 1)) \
 			$((row + i - 1)) $((x0 + 1)))$(pixline "$pl" $bg)   $lab"
 		i=$((i + 1))
 	done <<'TUX'
-....GGGGGG....
-...GGGGGGGG...
-..GGGGGGGGGG..
-..GGG.GG.GGG..
-..GGGGBBGGGG..
-.GGGGGGGGGGGG.
-GGGG......GGGG
-GGG........GGG
-.GG........GG.
-.GGG......GGG.
-..GGGG..GGGG..
-..BBBB..BBBB..
-.BBBBB..BBBBB.
+...GGGGGG...
+..GG.GG.GG..
+..GGGBBGGG..
+.GGGGGGGGGG.
+GGGG....GGGG
+.GGG....GGG.
+.BBBB..BBBB.
 TUX
 	printf '\0337%s\0338' "$ban"
 }
 
-banner() {	# colour, word1, word2: the pinned copy at the bottom
+banner() {	# colour, label: the pinned copy at the bottom
 	printf '\033[%d;1H\033[2K' $((ROWS - BH))
 	draw_banner $((ROWS - BH + 1)) "$@"
 }
@@ -146,8 +138,8 @@ banner() {	# colour, word1, word2: the pinned copy at the bottom
 # clear; green banner at the top, then the log scrolls from below it, and
 # the same banner pinned at the bottom
 printf '\033[r\033[2J'
-draw_banner 1 green KERNEL ALIVE
-banner green KERNEL ALIVE
+draw_banner 1 green "KERNEL ALIVE"
+banner green "KERNEL ALIVE"
 printf '\033[1;%dr\033[%d;1H' $((ROWS - BH - 1)) $((BH + 2))
 
 a5-diag panel
@@ -293,7 +285,7 @@ case $? in
 	echo " rescue : Nura did not start" ;;
 esac
 echo 1 > /sys/block/mmcblk0/force_ro	# rescue: the whole eMMC read-only
-banner red RESCUE MODE
+banner red "RESCUE MODE"
 
 if ifconfig usb0 2>/dev/null | grep -q 'inet addr:172.16.42.1'; then
 	touch /tmp/udhcpd.leases
