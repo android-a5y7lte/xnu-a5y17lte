@@ -1320,5 +1320,5 @@ columns wide in all. Same layout otherwise: a copy at rows 1-7 right after the
 clear, one pinned at rows 54-60, the log in a scroll region (rows 1-52) that
 is never reset. Checked with busybox under qemu: `sh -n` and the screen
 emulator (both copies render, letters legible). Image
-`out/a5y17lte-mainline-m5e-boot.img`, sha256 `574e18c6d948201af626cc8029c7665cf87dc3eea8b4081184fd8c2108c6c83f` (14,626,832 B), replacing
+`out/a5y17lte-mainline-m5e-boot.img`, sha256 `2156feb8149ad1b6512cb7319f821c95144521947a0911243cc0bb87b3b0a9c8 (built from commit 2980aa8; the build time stamp comes from the HEAD commit, so rebuilding at a later commit gives other bytes)` (14,626,832 B), replacing
 `2cd79c35…`.
