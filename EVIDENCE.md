@@ -1264,17 +1264,28 @@ Volume Down hold missed. (2) If rescue works, `mount -o remount,ro /` + `reboot
 -f` in Nura. (3) If rescue hangs too, write INFORM3 = 0x12345670 (PMU only)
 before the reboot.
 
-**Banners.** `mainline/rootfs/init` draws, at the top and bottom of the screen
-(13 rows each, console 67x60), a Tux in ASCII art and the text in 5-row block
-letters (a lit pixel is one space with a coloured background; the font has no
-block glyphs). Green `KERNEL ALIVE` is the first thing init does (the screen is
-cleared; the kernel's own log is the earlier sign of life and stays in dmesg).
-The log then scrolls in a scroll region between the two copies (rows 15-46).
-In rescue (Volume Down, or Nura failing to start) both copies are repainted in
-red as `RESCUE MODE` without clearing the log. Before `switch_root` the region
-is reset, so OpenRC's output scrolls the whole screen. Checked with busybox
-under qemu: `sh -n`, and a crude screen emulator rendering both copies (letters
-legible, widths within 67 columns, red path emits `41m`/`1;31m`). Not seen on
-the real screen yet. New image `out/a5y17lte-mainline-m5e-boot.img`, sha256
-`b6732974d7d4dd07882e7e9ecfe42f016756937c434cfe2c656ad2a754b0292d`
-(14,626,832 B; replaces `a4eb48ec…` and `e38f49cd…`, both in git history).
+**Banners.** First version (13-row banners at top and bottom, big text
+`KERNEL ALIVE`/`RESCUE MODE`, image `b6732974…`): on the phone the green banner
+was bigger than wanted, and when Nura's boot output took over the bottom copy
+scrolled away (init reset the scroll region before `switch_root`), leaving the
+lower part of the login screen blank (old photo
+`evidence/hw-mainline-m5e-nura-rw-login-2026-10-19.jpg`: the boot text and
+login prompt end about two thirds down the 60-row console).
+
+Second version: one compact banner pinned at the bottom, 7 rows: Tux (11
+columns) beside one block-letter word, green `ALIVE` or red `RESCUE`, with a
+blank row above. The log scrolls in a scroll region above it (rows 1-52) and
+the region is **never reset**, not even at `switch_root`, so the banner should
+stay through OpenRC and the login prompt. The top copy and the words `KERNEL`
+and `MODE` are gone for compactness. In rescue the banner is repainted in red
+without clearing the log. Checked with busybox under qemu: `sh -n` and a crude
+screen emulator (rows 54-60, no overflow past 67 columns). **Not verified:**
+that nothing in Nura resets the region or clears the screen (busybox `getty`,
+OpenRC's consolefont service); a full-screen program on the console that resets
+the region can overwrite the banner. If it disappears, the fallback is a
+repaint loop started from init (chrooted into the new root, since the
+initramfs root is gone after `switch_root`) or an OpenRC service in the
+device package.
+New image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `661b68aa3582c18193db592822547adadf12901eeae06bcf3cd4a3c0013a732c`
+(14,626,832 B; replaces `b6732974…`, `a4eb48ec…` and `e38f49cd…`, all in git
+history).

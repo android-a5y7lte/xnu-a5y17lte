@@ -26,41 +26,25 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
-# Screen banners. The console is fbcon, 67x60 (TER16x32 on 1080x1920). A
-# banner is a Tux in ASCII art plus the text in big block letters (a lit
-# "pixel" is one space with a coloured background, so no font glyphs are
-# needed). One copy sits at the top and one at the bottom; the log scrolls in
-# between (scroll region), so both stay on screen. Green = kernel alive,
-# red = rescue.
+# Screen banner, pinned at the bottom (EVIDENCE 27). The console is fbcon,
+# 67x60 (TER16x32 on 1080x1920). The banner is a Tux in ASCII art beside one
+# big word in block letters (a lit "pixel" is a space with a coloured
+# background, the font has no block glyphs), BH rows high. The log scrolls in
+# a scroll region above it, and the region is never reset, so the banner also
+# stays through Nura's boot and login. Green ALIVE = kernel alive, red RESCUE.
+# Full-screen programs on the console that reset the region can overwrite it.
 COLS=67
 ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
 [ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
-BH=13		# banner height in rows
-
-penguin() {
-	while IFS= read -r l; do printf '%*s%s\n' 26 '' "$l"; done <<'TUX'
-      .--.
-     |o_o |
-     |:_/ |
-    //   \ \
-   (|     | )
-  /'\_   _/`\
-  \___)=(___/
-TUX
-}
+BH=7		# banner height in rows; one blank row above it
 
 glyph() {	# char -> g = 5 rows of bits, space separated
 	case $1 in
 	A) g="0110 1001 1111 1001 1001";;
 	C) g="0111 1000 1000 1000 0111";;
-	D) g="1110 1001 1001 1001 1110";;
 	E) g="1111 1000 1110 1000 1111";;
 	I) g="111 010 010 010 111";;
-	K) g="1001 1010 1100 1010 1001";;
 	L) g="1000 1000 1000 1000 1111";;
-	M) g="10001 11011 10101 10001 10001";;
-	N) g="1001 1101 1011 1001 1001";;
-	O) g="0110 1001 1001 1001 0110";;
 	R) g="1110 1001 1110 1010 1001";;
 	S) g="0111 1000 0110 0001 1110";;
 	U) g="1001 1001 1001 1001 0110";;
@@ -69,50 +53,59 @@ glyph() {	# char -> g = 5 rows of bits, space separated
 	esac
 }
 
-bigtext() {	# text, background colour code (41 red, 42 green): 5 rows
-	local text=$1 on t r=1 c bits row out w
-	on=$(printf '\033[%sm \033[0m' "$2")
-	while [ $r -le 5 ]; do
-		bits=; t=$text
-		while [ -n "$t" ]; do
-			c=${t%"${t#?}"}; t=${t#?}
-			glyph "$c"; set -- $g; eval "row=\${$r}"; bits="$bits${row}0"
-		done
-		out=; w=${#bits}
-		while [ -n "$bits" ]; do
-			case $bits in
-			1*) out="$out$on";;
-			*) out="$out ";;
-			esac
-			bits=${bits#?}
-		done
-		printf '%*s%s' $(( (COLS - w) / 2 )) '' "$out"
-		[ $r -lt 5 ] && printf '\n'
-		r=$((r + 1))
+textrow() {	# word, row 1-5, background code: one row of lit/unlit cells
+	local t=$1 r=$2 on bits= c row out=
+	on=$(printf '\033[%sm \033[0m' "$3")
+	while [ -n "$t" ]; do
+		c=${t%"${t#?}"}; t=${t#?}
+		glyph "$c"; set -- $g; eval "row=\${$r}"; bits="$bits${row}0"
 	done
+	while [ -n "$bits" ]; do
+		case $bits in
+		1*) out="$out$on";;
+		*) out="$out ";;
+		esac
+		bits=${bits#?}
+	done
+	printf '%s' "$out"
 }
 
-draw_banner() {	# first row, colour name, text; cursor and scroll region kept
-	local row=$1 fg bg i=0
-	[ "$2" = red ] && { fg=31; bg=41; } || { fg=32; bg=42; }
-	printf '\033%s' 7
-	while [ $i -lt $BH ]; do printf '\033[%d;1H\033[2K' $((row + i)); i=$((i + 1)); done
-	printf '\033[%d;1H\033[1;%sm' $row $fg
-	penguin
-	printf '\033[0m\n'
-	bigtext "$3" $bg
-	printf '\033%s' 8
+textwidth() {	# word -> columns (glyph widths plus one gap each)
+	local t=$1 c w=0
+	while [ -n "$t" ]; do
+		c=${t%"${t#?}"}; t=${t#?}
+		glyph "$c"; set -- $g; w=$((w + ${#1} + 1))
+	done
+	echo $w
 }
 
-banner() {	# colour, text: top and bottom copy
-	draw_banner 1 "$1" "$2"
-	draw_banner $((ROWS - BH + 1)) "$1" "$2"
+banner() {	# colour (red|green), word: repaint the bottom banner only
+	local fg=32 bg=42 word=$2 tw i=1 pl ban= x0
+	[ "$1" = red ] && { fg=31; bg=41; }
+	tw=$(textwidth "$word")
+	x0=$(( (COLS - 11 - 3 - tw) / 2 ))
+	while IFS= read -r pl; do
+		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH\033[1;%sm%-11s\033[0m   ' \
+			$((ROWS - BH + i)) $((ROWS - BH + i)) $((x0 + 1)) $fg "$pl")"
+		[ $i -ge 2 ] && [ $i -le 6 ] && ban="$ban$(textrow "$word" $((i - 1)) $bg)"
+		i=$((i + 1))
+	done <<'TUX'
+    .--.
+   |o_o |
+   |:_/ |
+  //   \ \
+ (|     | )
+/'\_   _/`\
+\___)=(___/
+TUX
+	printf '\033[%d;1H\033[2K' $((ROWS - BH))	# the blank row above it
+	printf '\0337%s\0338' "$ban"
 }
 
-# green banner, then the log scrolls between the two copies
+# clear, green banner, and the log scrolls above it from the top
 printf '\033[r\033[2J'
-banner green "KERNEL ALIVE"
-printf '\033[%d;%dr\033[%d;1H' $((BH + 2)) $((ROWS - BH - 1)) $((BH + 2))
+banner green ALIVE
+printf '\033[1;%dr\033[1;1H' $((ROWS - BH - 1))
 
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
@@ -237,7 +230,6 @@ boot_nura() {	# rw|ram
 	mount --move /proc $n/proc
 	mount --move /sys $n/sys	# with configfs (the gadget) and debugfs
 	echo " nura   : switch_root -> /sbin/init (OpenRC)"
-	printf '\033[r\033[%d;1H' $ROWS	# whole screen scrolls again
 	exec switch_root $n /sbin/init
 }
 
@@ -258,7 +250,7 @@ case $? in
 	echo " rescue : Nura did not start" ;;
 esac
 echo 1 > /sys/block/mmcblk0/force_ro	# rescue: the whole eMMC read-only
-banner red "RESCUE MODE"
+banner red RESCUE
 
 if ifconfig usb0 2>/dev/null | grep -q 'inet addr:172.16.42.1'; then
 	touch /tmp/udhcpd.leases
