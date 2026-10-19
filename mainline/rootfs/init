@@ -26,9 +26,20 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
+# Inverse-video bar, 3 lines, centred in 66 columns (fbcon 67x60, TER16x32 on
+# 1080 px): so the screen says at a glance which environment is running.
+banner() {	# text
+	local t=$1 pad
+	pad=$(( (66 - ${#t}) / 2 ))
+	printf '\033[7m%66s\033[0m\n' ''
+	printf '\033[7m%*s%s%*s\033[0m\n' $pad '' "$t" $(( 66 - pad - ${#t} )) ''
+	printf '\033[7m%66s\033[0m\n' ''
+}
+
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
 stty -echo -icanon 2>/dev/null
+banner "K E R N E L   A L I V E   -   I N I T   R U N N I N G"
 
 echo
 echo "========================================="
@@ -191,4 +202,5 @@ fi
 echo
 echo " Hold POWER for 3 s to reboot into TWRP."
 echo
+banner "R E S C U E   M O D E"
 exec a5-diag keys

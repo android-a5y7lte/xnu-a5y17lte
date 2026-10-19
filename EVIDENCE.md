@@ -1229,3 +1229,46 @@ SYSTEM so far; no package was installed.
 **Not made persistent yet:** route, DNS and clock live in RAM; the PC rules are
 lost at PC reboot. Making them permanent belongs in the device package (an
 OpenRC script), through a rootfs rebuild.
+
+## 27. The `reboot` hang: diagnosis so far, and screen banners (2026-10-20)
+
+**Symptom.** `reboot` in Nura: the gadget tears down cleanly, the screen stays
+on the Samsung logo, forced power-off (Volume Down + Power) needed. Seen three
+times, repeatable.
+
+**Reset path checked (read-only).** `syscon-reboot` (PMU+0x400 = 1) is in the DT
+and `POWER_RESET_SYSCON=y`; the reset does happen (logo returns) and the init's
+3 s Power hold reboots into TWRP through the same node. No watchdog node, no
+power-off handler (separate, not hit yet), PSCI v0.1 without SYSTEM_RESET.
+`reboot-mode` writes INFORM3 only for a known command; a plain `reboot` (cmd
+NULL) writes nothing. Samsung's `sec_reboot()` writes INFORM2 = 0x12345678 and
+INFORM3 = 0x12345670 first.
+
+**Registers** (`mainline/tools/pmu-peek.c`, read-only mmap; `dd` on /dev/mem
+gives EFAULT for MMIO on arm64): before the reboot PMU+0x404 = 0x20000000,
+INFORM2 (0x808) = 0x12345678, INFORM3 (0x80c) = 0; after the forced power-off
+and a normal boot, identical. INFORM2 already holds Samsung's value, INFORM3 = 0
+is also the state of a boot that works, so the INFORM theory is unlikely but not
+fully excluded (0x12345670 vs 0 is untested).
+
+**USB.** `18d1:4ee2 SAMSUNG_Android` is TWRP (see EVIDENCE 6 and 18), not a
+download mode. A first run suggested a slow boot (TWRP at +180 s, then Nura);
+that was the forced recovery trip. Hands-off test, `reboot` at 01:20:08 and
+6+ minutes untouched: only the gadget teardown, then no USB device at all until
+the forced power-off. So it is a real hang before our gadget exists: S-Boot,
+U-Boot before `bootm`, or early Linux. Screen: the Samsung logo (first runs;
+the last run's description was not given).
+
+**Open.** (1) Plain `reboot -f` from rescue (nothing mounted): not run, the
+Volume Down hold missed. (2) If rescue works, `mount -o remount,ro /` + `reboot
+-f` in Nura. (3) If rescue hangs too, write INFORM3 = 0x12345670 (PMU only)
+before the reboot.
+
+**Banners.** `mainline/rootfs/init` now prints a 3-line inverse-video bar,
+66 columns (the console is 67x60): `K E R N E L   A L I V E ...` as the first
+thing after the display is on (the kernel's own log text is the earlier sign of
+life), and `R E S C U E   M O D E` as the last thing in rescue, so it stays on
+the bottom of the screen. Checked with busybox under qemu (`sh -n`, bar width
+66). New image `out/a5y17lte-mainline-m5e-boot.img`, sha256
+`a4eb48eca4b710a21b6c30659577b1c022feae615396c167169014b192682420` (replaces
+the file that was `e38f49cd…`; that one is in git history). Not on the phone.
