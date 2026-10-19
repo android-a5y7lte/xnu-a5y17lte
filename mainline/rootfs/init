@@ -26,20 +26,97 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
-# Inverse-video bar, 3 lines, centred in 66 columns (fbcon 67x60, TER16x32 on
-# 1080 px): so the screen says at a glance which environment is running.
-banner() {	# text
-	local t=$1 pad
-	pad=$(( (66 - ${#t}) / 2 ))
-	printf '\033[7m%66s\033[0m\n' ''
-	printf '\033[7m%*s%s%*s\033[0m\n' $pad '' "$t" $(( 66 - pad - ${#t} )) ''
-	printf '\033[7m%66s\033[0m\n' ''
+# Screen banners. The console is fbcon, 67x60 (TER16x32 on 1080x1920). A
+# banner is a Tux in ASCII art plus the text in big block letters (a lit
+# "pixel" is one space with a coloured background, so no font glyphs are
+# needed). One copy sits at the top and one at the bottom; the log scrolls in
+# between (scroll region), so both stay on screen. Green = kernel alive,
+# red = rescue.
+COLS=67
+ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
+[ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
+BH=13		# banner height in rows
+
+penguin() {
+	while IFS= read -r l; do printf '%*s%s\n' 26 '' "$l"; done <<'TUX'
+      .--.
+     |o_o |
+     |:_/ |
+    //   \ \
+   (|     | )
+  /'\_   _/`\
+  \___)=(___/
+TUX
 }
+
+glyph() {	# char -> g = 5 rows of bits, space separated
+	case $1 in
+	A) g="0110 1001 1111 1001 1001";;
+	C) g="0111 1000 1000 1000 0111";;
+	D) g="1110 1001 1001 1001 1110";;
+	E) g="1111 1000 1110 1000 1111";;
+	I) g="111 010 010 010 111";;
+	K) g="1001 1010 1100 1010 1001";;
+	L) g="1000 1000 1000 1000 1111";;
+	M) g="10001 11011 10101 10001 10001";;
+	N) g="1001 1101 1011 1001 1001";;
+	O) g="0110 1001 1001 1001 0110";;
+	R) g="1110 1001 1110 1010 1001";;
+	S) g="0111 1000 0110 0001 1110";;
+	U) g="1001 1001 1001 1001 0110";;
+	V) g="10001 10001 01010 01010 00100";;
+	*) g="00 00 00 00 00";;
+	esac
+}
+
+bigtext() {	# text, background colour code (41 red, 42 green): 5 rows
+	local text=$1 on t r=1 c bits row out w
+	on=$(printf '\033[%sm \033[0m' "$2")
+	while [ $r -le 5 ]; do
+		bits=; t=$text
+		while [ -n "$t" ]; do
+			c=${t%"${t#?}"}; t=${t#?}
+			glyph "$c"; set -- $g; eval "row=\${$r}"; bits="$bits${row}0"
+		done
+		out=; w=${#bits}
+		while [ -n "$bits" ]; do
+			case $bits in
+			1*) out="$out$on";;
+			*) out="$out ";;
+			esac
+			bits=${bits#?}
+		done
+		printf '%*s%s' $(( (COLS - w) / 2 )) '' "$out"
+		[ $r -lt 5 ] && printf '\n'
+		r=$((r + 1))
+	done
+}
+
+draw_banner() {	# first row, colour name, text; cursor and scroll region kept
+	local row=$1 fg bg i=0
+	[ "$2" = red ] && { fg=31; bg=41; } || { fg=32; bg=42; }
+	printf '\033%s' 7
+	while [ $i -lt $BH ]; do printf '\033[%d;1H\033[2K' $((row + i)); i=$((i + 1)); done
+	printf '\033[%d;1H\033[1;%sm' $row $fg
+	penguin
+	printf '\033[0m\n'
+	bigtext "$3" $bg
+	printf '\033%s' 8
+}
+
+banner() {	# colour, text: top and bottom copy
+	draw_banner 1 "$1" "$2"
+	draw_banner $((ROWS - BH + 1)) "$1" "$2"
+}
+
+# green banner, then the log scrolls between the two copies
+printf '\033[r\033[2J'
+banner green "KERNEL ALIVE"
+printf '\033[%d;%dr\033[%d;1H' $((BH + 2)) $((ROWS - BH - 1)) $((BH + 2))
 
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
 stty -echo -icanon 2>/dev/null
-banner "K E R N E L   A L I V E   -   I N I T   R U N N I N G"
 
 echo
 echo "========================================="
@@ -160,6 +237,7 @@ boot_nura() {	# rw|ram
 	mount --move /proc $n/proc
 	mount --move /sys $n/sys	# with configfs (the gadget) and debugfs
 	echo " nura   : switch_root -> /sbin/init (OpenRC)"
+	printf '\033[r\033[%d;1H' $ROWS	# whole screen scrolls again
 	exec switch_root $n /sbin/init
 }
 
@@ -180,6 +258,7 @@ case $? in
 	echo " rescue : Nura did not start" ;;
 esac
 echo 1 > /sys/block/mmcblk0/force_ro	# rescue: the whole eMMC read-only
+banner red "RESCUE MODE"
 
 if ifconfig usb0 2>/dev/null | grep -q 'inet addr:172.16.42.1'; then
 	touch /tmp/udhcpd.leases
@@ -202,5 +281,4 @@ fi
 echo
 echo " Hold POWER for 3 s to reboot into TWRP."
 echo
-banner "R E S C U E   M O D E"
 exec a5-diag keys

@@ -1264,11 +1264,17 @@ Volume Down hold missed. (2) If rescue works, `mount -o remount,ro /` + `reboot
 -f` in Nura. (3) If rescue hangs too, write INFORM3 = 0x12345670 (PMU only)
 before the reboot.
 
-**Banners.** `mainline/rootfs/init` now prints a 3-line inverse-video bar,
-66 columns (the console is 67x60): `K E R N E L   A L I V E ...` as the first
-thing after the display is on (the kernel's own log text is the earlier sign of
-life), and `R E S C U E   M O D E` as the last thing in rescue, so it stays on
-the bottom of the screen. Checked with busybox under qemu (`sh -n`, bar width
-66). New image `out/a5y17lte-mainline-m5e-boot.img`, sha256
-`a4eb48eca4b710a21b6c30659577b1c022feae615396c167169014b192682420` (replaces
-the file that was `e38f49cd…`; that one is in git history). Not on the phone.
+**Banners.** `mainline/rootfs/init` draws, at the top and bottom of the screen
+(13 rows each, console 67x60), a Tux in ASCII art and the text in 5-row block
+letters (a lit pixel is one space with a coloured background; the font has no
+block glyphs). Green `KERNEL ALIVE` is the first thing init does (the screen is
+cleared; the kernel's own log is the earlier sign of life and stays in dmesg).
+The log then scrolls in a scroll region between the two copies (rows 15-46).
+In rescue (Volume Down, or Nura failing to start) both copies are repainted in
+red as `RESCUE MODE` without clearing the log. Before `switch_root` the region
+is reset, so OpenRC's output scrolls the whole screen. Checked with busybox
+under qemu: `sh -n`, and a crude screen emulator rendering both copies (letters
+legible, widths within 67 columns, red path emits `41m`/`1;31m`). Not seen on
+the real screen yet. New image `out/a5y17lte-mainline-m5e-boot.img`, sha256
+`b6732974d7d4dd07882e7e9ecfe42f016756937c434cfe2c656ad2a754b0292d`
+(14,626,832 B; replaces `a4eb48ec…` and `e38f49cd…`, both in git history).
