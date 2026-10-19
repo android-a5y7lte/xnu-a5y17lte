@@ -26,25 +26,33 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
-# Screen banner, pinned at the bottom (EVIDENCE 27). The console is fbcon,
-# 67x60 (TER16x32 on 1080x1920). The banner is a Tux in ASCII art beside one
-# big word in block letters (a lit "pixel" is a space with a coloured
-# background, the font has no block glyphs), BH rows high. The log scrolls in
-# a scroll region above it, and the region is never reset, so the banner also
-# stays through Nura's boot and login. Green ALIVE = kernel alive, red RESCUE.
-# Full-screen programs on the console that reset the region can overwrite it.
+# Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
+# 1080x1920). A banner is a pixel-art Tux (2 cells per pixel, 13 rows) with
+# the label in block letters to its right, vertically centred; a lit pixel is
+# a space with a coloured background (the font has no block glyphs). One copy
+# is drawn at the top when init starts (it scrolls away with the log), one is
+# pinned at the bottom: the log scrolls in a region above it, and the region
+# is never reset, so it also stays through Nura's boot and login. Green =
+# kernel alive, red = rescue (text and penguin). Beak and feet are yellow
+# (the console's orange). Full-screen programs that reset the scroll region
+# can overwrite the pinned copy.
 COLS=67
 ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
 [ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
-BH=7		# banner height in rows; one blank row above it
+BH=13		# banner height in rows
 
 glyph() {	# char -> g = 5 rows of bits, space separated
 	case $1 in
 	A) g="0110 1001 1111 1001 1001";;
 	C) g="0111 1000 1000 1000 0111";;
+	D) g="1110 1001 1001 1001 1110";;
 	E) g="1111 1000 1110 1000 1111";;
 	I) g="111 010 010 010 111";;
+	K) g="1001 1010 1100 1010 1001";;
 	L) g="1000 1000 1000 1000 1111";;
+	M) g="10001 11011 10101 10001 10001";;
+	N) g="1001 1101 1011 1001 1001";;
+	O) g="0110 1001 1001 1001 0110";;
 	R) g="1110 1001 1110 1010 1001";;
 	S) g="0111 1000 0110 0001 1110";;
 	U) g="1001 1001 1001 1001 0110";;
@@ -79,33 +87,68 @@ textwidth() {	# word -> columns (glyph widths plus one gap each)
 	echo $w
 }
 
-banner() {	# colour (red|green), word: repaint the bottom banner only
-	local fg=32 bg=42 word=$2 tw i=1 pl ban= x0
-	[ "$1" = red ] && { fg=31; bg=41; }
-	tw=$(textwidth "$word")
-	x0=$(( (COLS - 11 - 3 - tw) / 2 ))
-	while IFS= read -r pl; do
-		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH\033[1;%sm%-11s\033[0m   ' \
-			$((ROWS - BH + i)) $((ROWS - BH + i)) $((x0 + 1)) $fg "$pl")"
-		[ $i -ge 2 ] && [ $i -le 6 ] && ban="$ban$(textrow "$word" $((i - 1)) $bg)"
+# Tux, 14 pixels wide: G body, B beak and feet, . empty (eyes and belly are
+# empty holes in the body)
+TUXW=28
+pixline() {	# pixel row, body background code -> 2 cells per pixel
+	local r=$1 body beak out= c
+	body=$(printf '\033[%sm  \033[0m' "$2")
+	beak=$(printf '\033[43m  \033[0m')
+	while [ -n "$r" ]; do
+		c=${r%"${r#?}"}; r=${r#?}
+		case $c in
+		G) out="$out$body";;
+		B) out="$out$beak";;
+		*) out="$out  ";;
+		esac
+	done
+	printf '%s' "$out"
+}
+
+draw_banner() {	# first row, colour (red|green), word1, word2
+	local row=$1 bg=42 w1=$3 w2=$4 i=1 pl ban= x0 tw lw lab
+	[ "$2" = red ] && bg=41
+	tw=$(textwidth "$w1"); lw=$(textwidth "$w2")
+	[ $lw -gt $tw ] && tw=$lw
+	x0=$(( (COLS - TUXW - 3 - tw) / 2 ))
+	while read -r pl; do
+		lab=
+		case $i in
+		[2-6]) lab=$(textrow "$w1" $((i - 1)) $bg);;
+		[8-9]|1[0-2]) lab=$(textrow "$w2" $((i - 7)) $bg);;
+		esac
+		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH' $((row + i - 1)) \
+			$((row + i - 1)) $((x0 + 1)))$(pixline "$pl" $bg)   $lab"
 		i=$((i + 1))
 	done <<'TUX'
-    .--.
-   |o_o |
-   |:_/ |
-  //   \ \
- (|     | )
-/'\_   _/`\
-\___)=(___/
+....GGGGGG....
+...GGGGGGGG...
+..GGGGGGGGGG..
+..GGG.GG.GGG..
+..GGGGBBGGGG..
+.GGGGGGGGGGGG.
+GGGG......GGGG
+GGG........GGG
+.GG........GG.
+.GGG......GGG.
+..GGGG..GGGG..
+..BBBB..BBBB..
+.BBBBB..BBBBB.
 TUX
-	printf '\033[%d;1H\033[2K' $((ROWS - BH))	# the blank row above it
 	printf '\0337%s\0338' "$ban"
 }
 
-# clear, green banner, and the log scrolls above it from the top
+banner() {	# colour, word1, word2: the pinned copy at the bottom
+	printf '\033[%d;1H\033[2K' $((ROWS - BH))
+	draw_banner $((ROWS - BH + 1)) "$@"
+}
+
+# clear; green banner at the top, then the log scrolls from below it, and
+# the same banner pinned at the bottom
 printf '\033[r\033[2J'
-banner green ALIVE
-printf '\033[1;%dr\033[1;1H' $((ROWS - BH - 1))
+draw_banner 1 green KERNEL ALIVE
+banner green KERNEL ALIVE
+printf '\033[1;%dr\033[%d;1H' $((ROWS - BH - 1)) $((BH + 2))
 
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
@@ -250,7 +293,7 @@ case $? in
 	echo " rescue : Nura did not start" ;;
 esac
 echo 1 > /sys/block/mmcblk0/force_ro	# rescue: the whole eMMC read-only
-banner red RESCUE
+banner red RESCUE MODE
 
 if ifconfig usb0 2>/dev/null | grep -q 'inet addr:172.16.42.1'; then
 	touch /tmp/udhcpd.leases

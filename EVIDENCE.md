@@ -1289,3 +1289,20 @@ device package.
 New image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `661b68aa3582c18193db592822547adadf12901eeae06bcf3cd4a3c0013a732c`
 (14,626,832 B; replaces `b6732974…`, `a4eb48ec…` and `e38f49cd…`, all in git
 history).
+
+Third version (Jimmy's mockup): the banner is a pixel-art Tux 13 rows tall
+(2 console cells per pixel: rounded head, two eye holes, yellow beak, hollow
+belly, flippers, yellow feet) with the label to its right in block letters,
+two stacked words vertically centred beside it: `KERNEL` / `ALIVE` (green) or
+`RESCUE` / `MODE` (red; the penguin is red too in rescue). Two copies: one
+drawn at rows 1-13 right after the screen is cleared at init start (it scrolls
+away with the log), one pinned at rows 48-60 with the log in a scroll region
+above it (rows 1-46, never reset, so it should stay through Nura's boot as in
+the second version, still unverified on the phone). Deviations from the
+mockup: the belly is a black hole, not white, and the beak and feet are the
+console's yellow-brown, because "the whole penguin green" was also asked (the
+console has no orange; the belly could be white, at the cost of a green-only
+penguin). Checked with busybox under qemu: `sh -n`, a screen emulator
+rendering both copies (widest column 64 of 67; drawing takes about 0.8 s under
+qemu, so far less on the phone). Image `out/a5y17lte-mainline-m5e-boot.img`,
+sha256 `2cd79c35dc22e0e48ad3049b1b2e2c0831ebdce26aa768ffd92d839adbeca4eb` (14,626,832 B), replacing `661b68aa…`.
