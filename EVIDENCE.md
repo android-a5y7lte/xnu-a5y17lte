@@ -1336,3 +1336,12 @@ region (rows 1-56) that is never reset. Checked with busybox under qemu: `sh
 -n` and the screen emulator (both copies render). Image
 `out/a5y17lte-mainline-m5e-boot.img`, sha256 `88aa19ce34967cd6b200f55e5a5eaf524d1750e4e7db5b46f4dd770f904593c8` (14626832 B), built at commit
 869f03c (the build time stamp comes from the HEAD commit), replacing `2156feb8…`.
+
+Sixth version (Jimmy: penguin 6 rows tall instead of 4, the rest the same): the
+Tux is 10 pixels wide and 6 rows tall (rounded head, two eye holes, yellow
+beak, flippers around a hollow belly, yellow feet); the banner is therefore 6
+rows: copies at rows 1-6 and 55-60, scroll region rows 1-53. The label stays
+on one line beside it, now at the beak row (row 3 of 6, was row 2 of 4), same
+text and colours. Checked with busybox under qemu: `sh -n` and the screen
+emulator. Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `996ed3645d518f97b9b89f78443083e3b40e582a1bad3cb0e906555836f494c9` (14626832 B),
+built at commit a970597, replacing `88aa19ce…`.
