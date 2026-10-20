@@ -39,6 +39,7 @@ a5-diag system
 a5-diag usb
 a5-diag android
 a5-diag touch
+a5-diag gpu status
 # K8: SDIO clock gates for the Wi-Fi chip; if they were off the card was not
 # found at boot, so bind the host again (this also repeats the power sequence)
 a5-diag mmc1

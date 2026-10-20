@@ -1346,3 +1346,50 @@ pwrseq_simple.o compile; a5-diag builds with -Wall -Wextra -Werror.
 together), flash with TWRP -> Boot; in rescue: `a5-diag mmc1`,
 `dmesg | grep -i 'mmc1\|sdio\|ath10k'`. Success = "new SDIO card", vendor 0x271.
 Without firmware ath10k will say it can't load firmware; that is expected.
+
+## K5a. GPU power domain, CMU_G3D and `a5-diag gpu`: built 2026-10-20, NOT yet tested (branch android-k5, on top of android-k8)
+
+**Scope.** Prepare the Mali-T830 without driving it: DT nodes, PM core, and a
+step-by-step diagnostic. No Panfrost yet (K5b). Compiled only; no flashing, no
+eMMC write.
+
+**Findings (source reading, no hardware).**
+- Samsung `S5E7880-cmusfr.h` CMU_G3D (0x11460000): PLL 0x000/0x100, mux
+  0x200/0x204/0x208, div 0x400/0x404, gates 0x800/0x804/0x808, with the same
+  bit positions as mainline `clk-exynos7870.c` (G3D clock gate = 0x804 bit 6,
+  ASYNCS_D0 = bit 1). So the Exynos7870 `samsung,exynos7870-cmu-g3d` driver
+  should fit; only the "switch" parent differs (CCORE gate on 7880, CMU_MIF
+  on 7870), modelled as a fixed clock like the CMU_FSYS inputs.
+- pd_g3d (PMU 0x106b4000: G3D_CONFIGURATION +0, G3D_STATUS +4) has the layout
+  of mainline `samsung,exynos4210-pd` (local_pwr_cfg 0xf). That driver exists;
+  a new one is not needed (a review claiming otherwise was wrong, see the chat).
+- Panfrost does not need EXYNOS_IOMMU (its own io-pgtable); `clock-names` must
+  be "core"/"bus"; PM_RUNTIME no longer exists (CONFIG_PM).
+
+**Changes.**
+- `exynos7880.dtsi`: `clk_g3d_switch` fixed clock, `pd_g3d` power-domain node,
+  `cmu_g3d` and `gpu` (Panfrost, T830, SPI 282/283/281, clocks core/bus,
+  power-domains) both `status = "disabled"`.
+- Config: `CONFIG_PM=y` (ARCH_EXYNOS then selects PM_GENERIC_DOMAINS and
+  EXYNOS_PM_DOMAINS). Side effect to watch: runtime PM is now active for USB,
+  MMC and others.
+- `a5-diag gpu [status|on|clk|id]`: `status` reads only PMU (run at every boot);
+  the others are explicit steps: power on, dump CMU_G3D, set gate bits, read
+  GPU_ID. CMU_G3D and the GPU are never touched unless the domain is powered.
+
+**Checked.** Config symbols stick; DTB builds with W=1 clean; exynos-pm-domains.o
+and clk-exynos7870.o compile; a5-diag builds with -Wall -Wextra -Werror.
+
+**Risks.**
+1. A register access to an unclocked block hangs the bus: Volume Down + Power.
+   That is why `gpu id` refuses unless the gate bits are on.
+2. CONFIG_PM=y may change USB gadget / eMMC behaviour (autosuspend). Compare the
+   boot log with the last good image; the USB link must still come up.
+3. Enabling `cmu_g3d` in the DT (K5b) writes critical gates at probe: only after
+   `a5-diag gpu` shows POWERED.
+
+**Test.** `MILESTONE=k5a ./build-mainline.sh`, rescue shell (Volume Down):
+(1) `a5-diag gpu status` (boot banner shows it too); (2) if "off": `a5-diag gpu on`;
+(3) `a5-diag gpu`, `a5-diag gpu clk`, `a5-diag gpu id`, one at a time, pasting each
+output. Success = GPU_ID 0x0830xxxx. Record the status of the domain at boot
+(on or off): it decides whether the CMU driver can be enabled safely.

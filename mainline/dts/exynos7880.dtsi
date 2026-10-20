@@ -152,6 +152,20 @@
 		clock-output-names = "fsys_mmc1_ciu_fixed";
 	};
 
+	/*
+	 * K5: CMU_G3D's "switch" input is CCORE_GATE_CLKCMU_G3D_SWITCH on
+	 * Exynos7880 (BUS_PLL/2 / (div + 1), CCORE +0x460 / +0x860), which has no
+	 * Linux driver yet. Fixed stand-in under the CMU_MIF output name the
+	 * Exynos7870 CMU_G3D driver expects, like the CMU_FSYS inputs below.
+	 * The frequency is a placeholder until `a5-diag gpu` has read the divider.
+	 */
+	clk_g3d_switch: clock-g3d-switch {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <399750000>;
+		clock-output-names = "gout_mif_cmu_g3d_switch";
+	};
+
 	/* [D] 26 MHz crystal; [M] node name gives the "oscclk" clock name */
 	oscclk: oscclk {
 		compatible = "fixed-clock";
@@ -231,6 +245,54 @@
 			compatible = "samsung,exynos7880-pinctrl";
 			reg = <0x10630000 0x1000>;
 			interrupts = <GIC_SPI 327 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/*
+		 * K5: G3D power domain [D] pd_g3d@106b4000 (G3D_CONFIGURATION +0,
+		 * G3D_STATUS +4: same layout as samsung,exynos4210-pd). Left
+		 * powered as S-Boot found it (pd_ignore_unused on the cmdline).
+		 */
+		pd_g3d: power-domain@106b4000 {
+			compatible = "samsung,exynos4210-pd";
+			reg = <0x106b4000 0x20>;
+			#power-domain-cells = <0>;
+			label = "G3D";
+		};
+
+		/*
+		 * K5: CMU_G3D registers match the Exynos7870 driver one to one
+		 * (PLL 0x100, mux 0x200/204/208, div 0x400/404, gates 0x800-0x808;
+		 * Samsung S5E7880-cmusfr.h). Disabled: probing writes the
+		 * critical gates, which needs the domain powered; enable it after
+		 * `a5-diag gpu` shows the domain state.
+		 */
+		cmu_g3d: clock-controller@11460000 {
+			compatible = "samsung,exynos7870-cmu-g3d";
+			reg = <0x11460000 0x1000>;
+			#clock-cells = <1>;
+
+			clock-names = "oscclk", "switch";
+			clocks = <&oscclk>, <&clk_g3d_switch>;
+			power-domains = <&pd_g3d>;
+
+			status = "disabled";
+		};
+
+		/* [D] mali@11400000, SPI 282 job / 283 mmu / 281 gpu */
+		gpu: gpu@11400000 {
+			compatible = "samsung,exynos7870-mali", "arm,mali-t830";
+			reg = <0x11400000 0x5000>;
+			interrupt-names = "job", "mmu", "gpu";
+			interrupts = <GIC_SPI 282 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 283 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 281 IRQ_TYPE_LEVEL_HIGH>;
+
+			clock-names = "core", "bus";
+			clocks = <&cmu_g3d CLK_GOUT_G3D_CLK>,
+				 <&cmu_g3d CLK_GOUT_G3D_ASYNCS_D0_CLK>;
+			power-domains = <&pd_g3d>;
+
+			status = "disabled";
 		};
 
 		/* [D] pinctrl_4: pinctrl@13750000 (FSYS), GPIO EINT on SPI 250 */

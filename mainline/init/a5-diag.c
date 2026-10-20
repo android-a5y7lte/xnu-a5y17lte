@@ -278,6 +278,93 @@ static int cmd_mmc1(void)
 	return changed ? 10 : 0;
 }
 
+/*
+ * K5: Mali-T830 bring-up, in explicit steps because touching a register of
+ * an unpowered or unclocked block can hang the bus (then: Volume Down +
+ * Power to force off). Each step is separate:
+ *   gpu status  PMU domain status only (run at every boot)
+ *   gpu         read-only: also CMU_G3D, but only if the domain is powered
+ *   gpu on      power the pd_g3d domain on (PMU), wait for status, dump CMU_G3D
+ *   gpu clk     set the CMU_G3D gate enable bits, dump again
+ *   gpu id      read GPU_ID (needs domain on and CLK_G3D gate on)
+ */
+#define PMU_G3D_BASE		0x106b4000UL
+#define CMU_G3D			0x11460000UL
+#define MALI_BASE		0x11400000UL
+#define G3D_PWR_MASK		0xfu
+
+static void gpu_dump_cmu(volatile uint32_t *g)
+{
+	printf(" gpu    : G3D_PLL %08x  mux pll %08x switch %08x g3d %08x\n",
+	       R(g, 0x100), R(g, 0x200), R(g, 0x204), R(g, 0x208));
+	printf(" gpu    : stat pll %08x switch %08x g3d %08x  div bus %08x apb %08x\n",
+	       R(g, 0x600), R(g, 0x604), R(g, 0x608), R(g, 0x400), R(g, 0x404));
+	printf(" gpu    : gates osc %08x bus %08x apb %08x\n",
+	       R(g, 0x800), R(g, 0x804), R(g, 0x808));
+}
+
+static int cmd_gpu(const char *step)
+{
+	volatile uint32_t *pd = map(PMU_G3D_BASE), *g;
+	uint32_t cfg, st;
+
+	if (!pd) {
+		printf(" gpu    : /dev/mem map failed\n");
+		return 1;
+	}
+	cfg = R(pd, 0);
+	st = R(pd, 4);
+	printf(" gpu    : pd_g3d config %08x status %08x -> %s\n", cfg, st,
+	       (st & G3D_PWR_MASK) == G3D_PWR_MASK ? "POWERED" :
+	       (st & G3D_PWR_MASK) == 0 ? "off" : "partial");
+
+	if (step && !strcmp(step, "on") && (st & G3D_PWR_MASK) != G3D_PWR_MASK) {
+		R(pd, 0) = G3D_PWR_MASK;
+		for (int i = 0; i < 100 && (R(pd, 4) & G3D_PWR_MASK) != G3D_PWR_MASK; i++)
+			usleep(100);
+		st = R(pd, 4);
+		printf(" gpu    : power-on requested, status now %08x (%s)\n", st,
+		       (st & G3D_PWR_MASK) == G3D_PWR_MASK ? "POWERED" : "FAILED");
+		if ((st & G3D_PWR_MASK) != G3D_PWR_MASK)
+			return 1;
+	}
+	if (step && !strcmp(step, "status"))
+		return 0;	/* PMU only: safe at every boot */
+	if ((st & G3D_PWR_MASK) != G3D_PWR_MASK) {
+		printf(" gpu    : domain not powered, CMU_G3D and the GPU are not touched\n");
+		return 0;
+	}
+
+	g = map(CMU_G3D);
+	if (!g) {
+		printf(" gpu    : /dev/mem map failed\n");
+		return 1;
+	}
+	if (step && !strcmp(step, "clk")) {
+		R(g, 0x800) |= 0x3;
+		R(g, 0x804) |= 0x1ff;
+		R(g, 0x808) |= 0x7f;
+		printf(" gpu    : gate enable bits set\n");
+	}
+	gpu_dump_cmu(g);
+
+	if (step && !strcmp(step, "id")) {
+		volatile uint32_t *m;
+
+		if (!(R(g, 0x804) & (1u << 6)) || !(R(g, 0x808) & 1u)) {
+			printf(" gpu    : CLK_G3D / APB gate off, run `a5-diag gpu clk` first\n");
+			return 1;
+		}
+		m = map(MALI_BASE);
+		if (!m) {
+			printf(" gpu    : /dev/mem map failed\n");
+			return 1;
+		}
+		printf(" gpu    : GPU_ID %08x (Mali-T830 = 0x0830xxxx)\n", R(m, 0));
+	}
+	return 0;
+}
+
 static int cmd_usb(void)
 {
 	volatile uint32_t *cc = map(CMU_CCORE), *fs = map(CMU_FSYS), *pmu = map(PMU_BASE);
@@ -882,6 +969,8 @@ int main(int argc, char **argv)
 		return cmd_held(atoi(argv[2]));
 	if (!strcmp(argv[1], "lock-except") && argc > 2)
 		return cmd_lock_except(argv[2]);
+	if (!strcmp(argv[1], "gpu"))
+		return cmd_gpu(argc > 2 ? argv[2] : NULL);
 	if (!strcmp(argv[1], "mmc1"))
 		return cmd_mmc1();
 	if (!strcmp(argv[1], "touch"))
@@ -889,6 +978,6 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "keys"))
 		return cmd_keys();
 usage:
-	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|mmc1|held MS|lock-except NAME|keys\n");
+	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|mmc1|gpu [status|on|clk|id]|held MS|lock-except NAME|keys\n");
 	return 2;
 }
