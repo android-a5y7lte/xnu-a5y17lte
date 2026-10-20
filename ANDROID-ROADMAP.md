@@ -50,13 +50,20 @@ needs K9 only if AOSP lives on the SD card.
   Record kernel size against the BOOT partition size.
 
 ### W1: Waydroid container, headless
-- `apk add waydroid`, `waydroid init` (arm64 LineageOS image, about 1 GB in
-  /var/lib/waydroid). SYSTEM root is 686 MB inside a 4848 MiB partition, so
-  growing the filesystem (resize2fs) comes first: an eMMC write, ask Jimmy.
-- Software rendering: ro.hardware.gralloc=default, ro.hardware.egl=swiftshader
-  in waydroid_base.prop.
-- Compositor: `weston --backend=headless` (or phoc) as user, then
-  `waydroid session start`.
+Status 2026-10-20: W0 passed and is merged; Nura runs read-write from SYSTEM
+(OpenRC, console UI, 4.6 GB, about 4 GB free, internet through the PC's NAT).
+Full step list for the PC session: ANDROID-W1.md.
+- `apk add waydroid waydroid-openrc` (Alpine community, aarch64 supported;
+  depends on dnsmasq, iptables, kmod, lxc, python deps), then `waydroid init`
+  (arm64 LineageOS image, about 1 GB in /var/lib/waydroid, from
+  ota.waydro.id). SYSTEM is already grown, so no resize is needed.
+- Software rendering: under `[properties]` in /var/lib/waydroid/waydroid.cfg
+  add `ro.hardware.gralloc=default` and `ro.hardware.egl=swiftshader`, then
+  `waydroid upgrade -o` (docs.waydro.id FAQ; not waydroid_base.prop).
+- Compositor: `weston --backend=headless` (or cage with
+  WLR_BACKENDS=headless WLR_RENDERER=pixman) as a normal user, then
+  `waydroid session start`. Which headless compositor Waydroid accepts is
+  not documented: untested, try weston first.
 - Phone test: `waydroid shell getprop sys.boot_completed` = 1;
   `waydroid shell screencap -p` copied to the PC as the evidence image.
   This proves binder/binderfs, cgroups and the image on our kernel with no
