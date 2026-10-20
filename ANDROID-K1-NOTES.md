@@ -31,9 +31,8 @@ Everything below comes from Samsung's universal7880 kernel (hybris-17.1),
 
 ## What we still need (the work)
 1. The **NFC pin controller** (`pinctrl@139C0000`, SPI 439; bank gpc2 is in
-   our patch 0002 as `exynos7880_pin_banks5`) is **not in our DT** yet. Add it,
-   or skip it by driving the touch bus as GPIO only after adding the node
-   anyway (the bank has to exist for `&gpc2`).
+   our patch 0002 as `exynos7880_pin_banks5`) is **not in our DT** yet. Add it
+   first: even a bit-banged i2c-gpio touch bus needs `&gpc2` to exist.
 2. The PMIC node: S2MPU05 at its I2C address on its bus (look it up in
    `exynos7880-a5y17lte_common.dtsi` near line 400; the MUIC style i2c-gpio
    pattern can carry it until the CMU_PERI I2C clocks exist) with LDO32 and
