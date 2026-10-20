@@ -8,8 +8,9 @@ Everything below comes from Samsung's universal7880 kernel (hybris-17.1),
   panel 1080x1920, I2C address **0x20**.
 - Bus: hardware I2C2, `i2c@13890000`, SPI 430. Its pins are **gpc2-0 / gpc2-1**
   (function 2, pull-up), listed in Samsung's DT as `i2c_nfc_bus`. By the same
-  pattern as the MUIC bus (gpc1-0 SDA, gpc1-1 SCL), gpc2-0 is probably SDA and
-  gpc2-1 SCL; not confirmed.
+  pattern as the MUIC bus (gpc1-0 SDA, gpc1-1 SCL), gpc2-0 is SDA and gpc2-1 SCL
+  (confirmed from Samsung's pin-group order, SCL listed first; implemented on
+  branch android-k1, built, not yet tested on the phone: EVIDENCE "K1").
 - Interrupt: **gpa0-5** (ALIVE bank, function 0xF = EINT). Our ALIVE controller
   and the gpa0 bank already exist in the DT; Power uses gpa0-0 the same way.
 - Power: S2MPU05 PMIC regulators `vtouch_2.8v` (LDO32, boot-on) and
