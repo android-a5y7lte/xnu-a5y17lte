@@ -27,7 +27,7 @@ mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
 # Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
-# 1080x1920). A banner is a pixel-art Tux (1 console cell per pixel, 10x6)
+# 1080x1920). A banner is a pixel-art Tux (2 console cells per pixel, 12x10)
 # with the label beside it on one line, white on the banner colour; a lit
 # pixel is a space with a coloured background (the font has no block glyphs).
 # One copy is drawn at the top when init starts (it scrolls away with the
@@ -39,21 +39,21 @@ hostname a5y17lte
 COLS=67
 ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
 [ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
-BH=6		# banner height in rows
+BH=10		# banner height in rows
 
-# Tux, 10 pixels wide: G body, B beak and feet, . empty (the eyes and the
+# Tux, 12 pixels wide: G body, B beak and feet, . empty (the eyes and the
 # belly are empty holes in the body)
-TUXW=10
-pixline() {	# pixel row, body background code -> 1 cell per pixel
+TUXW=24
+pixline() {	# pixel row, body background code -> 2 cells per pixel
 	local r=$1 body beak out= c
-	body=$(printf '\033[%sm \033[0m' "$2")
-	beak=$(printf '\033[43m \033[0m')
+	body=$(printf '\033[%sm  \033[0m' "$2")
+	beak=$(printf '\033[43m  \033[0m')
 	while [ -n "$r" ]; do
 		c=${r%"${r#?}"}; r=${r#?}
 		case $c in
 		G) out="$out$body";;
 		B) out="$out$beak";;
-		*) out="$out ";;
+		*) out="$out  ";;
 		esac
 	done
 	printf '%s' "$out"
@@ -66,15 +66,19 @@ draw_banner() {	# first row, colour (red|green), label; cursor and region kept
 	while read -r pl; do
 		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH' $((row + i - 1)) \
 			$((row + i - 1)) $((x0 + 1)))$(pixline "$pl" $bg)"
-		[ $i -eq 3 ] && ban="$ban$(printf '   \033[1;37;%sm %s \033[0m' $bg "$word")"
+		[ $i -eq 4 ] && ban="$ban$(printf '   \033[1;37;%sm %s \033[0m' $bg "$word")"
 		i=$((i + 1))
 	done <<'TUX'
-...GGGG...
-..G.GG.G..
-..GGBBGG..
-.GGG..GGG.
-..GG..GG..
-..BB..BB..
+...GGGGGG...
+..GGGGGGGG..
+..GG.GG.GG..
+..GGGBBGGG..
+.GGGGGGGGGG.
+GGGG....GGGG
+GGG......GGG
+.GGG....GGG.
+..GGG..GGG..
+.BBBB..BBBB.
 TUX
 	printf '\0337%s\0338' "$ban"
 }
