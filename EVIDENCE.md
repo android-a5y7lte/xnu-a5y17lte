@@ -1345,3 +1345,13 @@ on one line beside it, now at the beak row (row 3 of 6, was row 2 of 4), same
 text and colours. Checked with busybox under qemu: `sh -n` and the screen
 emulator. Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `996ed3645d518f97b9b89f78443083e3b40e582a1bad3cb0e906555836f494c9` (14626832 B),
 built at commit a970597, replacing `88aa19ce…`.
+
+Seventh version (Jimmy: penguin 10 rows tall instead of 6, the rest the same):
+the Tux is 12 pixels wide at 2 console cells per pixel (24 columns, so the
+pixels stay square) and 10 rows tall; the banner is therefore 10 rows: copies
+at rows 1-10 and 51-60, scroll region rows 1-49. Shape: head, two eye holes,
+yellow beak, flippers around a hollow belly, yellow feet. The label stays on
+one line beside it at the beak row (row 4 of 10), same text and colours.
+Checked with busybox under qemu: `sh -n` and the screen emulator (widest
+column 53 of 67). Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `4b6fe1b0fef7061a852aca6d692d62f12ad0a3684008cb2ad04bc7197fa55116`
+(14626832 B), built at commit 55ed892, replacing `996ed364…`.
