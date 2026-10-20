@@ -73,6 +73,12 @@
 #define FSYS_EN_BUS		0x804
 #define FSYS_EN_USB20DRD_REF	0x828
 
+/* K8: MMC1 (SDIO, Wi-Fi). [D] notes: CCORE mux/div/enable and the FSYS gate */
+#define CCORE_MUX_MMC1		0x28c
+#define CCORE_DIV_MMC1		0x48c
+#define CCORE_EN_MMC1		0x88c
+#define FSYS_EN_MMC1		0x818
+
 #define PMU_BASE		0x106b0000UL
 #define PMU_USBDEV_PHY_CONTROL	0x704
 
@@ -231,6 +237,45 @@ static int cmd_system(void)
 		printf(" system : not ext4 (bytes 1080: %02x %02x)\n", sb[0x38], sb[0x39]);
 	}
 	return 0;
+}
+
+/*
+ * K8: show the MMC1 (SDIO) clock chain and switch the gates on, as cmd_usb
+ * does for USB: S-Boot never used this controller. Returns 10 if it turned
+ * something on (the caller then re-binds the mmc1 driver), 1 on error.
+ */
+static int cmd_mmc1(void)
+{
+	volatile uint32_t *cc = map(CMU_CCORE), *fs = map(CMU_FSYS);
+	unsigned int mux, div, en, fen;
+	int changed = 0;
+	double parent;
+
+	if (!cc || !fs) {
+		printf(" mmc1   : /dev/mem map failed\n");
+		return 1;
+	}
+	mux = R(cc, CCORE_MUX_MMC1);
+	div = R(cc, CCORE_DIV_MMC1);
+	en = R(cc, CCORE_EN_MMC1);
+	fen = R(fs, FSYS_EN_MMC1);
+	parent = ((mux >> 12) & 1) ? pll141xx_mhz(R(cc, CCORE_MEDIA_PLL_CON0)) / 2 :
+		 pll141xx_mhz(R(cc, CCORE_BUS_PLL_CON0)) / 2;
+	printf(" mmc1   : ccore mux %08x div %08x en %08x = %.3f MHz%s\n", mux, div, en,
+	       parent / ((div & 0xf) + 1), (en & 1) ? "" : "  GATED");
+	printf(" mmc1   : fsys gate %08x%s\n", fen, (fen & 1) ? "" : "  GATED");
+	if (!(en & 1)) {
+		R(cc, CCORE_EN_MMC1) = en | 1;
+		changed = 1;
+	}
+	if (!(fen & 1)) {
+		R(fs, FSYS_EN_MMC1) = fen | 1;
+		changed = 1;
+	}
+	if (changed)
+		printf(" mmc1   : gates turned ON (ccore %08x, fsys %08x)\n",
+		       R(cc, CCORE_EN_MMC1), R(fs, FSYS_EN_MMC1));
+	return changed ? 10 : 0;
 }
 
 static int cmd_usb(void)
@@ -837,11 +882,13 @@ int main(int argc, char **argv)
 		return cmd_held(atoi(argv[2]));
 	if (!strcmp(argv[1], "lock-except") && argc > 2)
 		return cmd_lock_except(argv[2]);
+	if (!strcmp(argv[1], "mmc1"))
+		return cmd_mmc1();
 	if (!strcmp(argv[1], "touch"))
 		return cmd_touch();
 	if (!strcmp(argv[1], "keys"))
 		return cmd_keys();
 usage:
-	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|held MS|lock-except NAME|keys\n");
+	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|mmc1|held MS|lock-except NAME|keys\n");
 	return 2;
 }

@@ -2,7 +2,7 @@
 /*
  * Samsung Exynos 7880 pin-mux and pin-config device tree source.
  *
- * M2: ALIVE controller (keys). K1: CCORE (gpm0, PMIC bus) and NFC (gpc2,
+ * M2: ALIVE controller (keys). K8: FSYS (gpr0-4, SDIO for Wi-Fi). K1: CCORE (gpm0, PMIC bus) and NFC (gpc2,
  * touch bus) controllers. M4c: TOP controller (I2C bus 0 pins for the
  * S2MU004 MUIC). Bank layout and interrupts from the Samsung universal7880
  * kernel: drivers/pinctrl/samsung/pinctrl-exynos.c exynos7880_pin_banks0/6,
@@ -84,6 +84,43 @@
 
 &pinctrl_ccore {
 	gpm0: gpm0-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+};
+
+&pinctrl_fsys {
+	gpr0: gpr0-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	gpr1: gpr1-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	gpr2: gpr2-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	gpr3: gpr3-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	gpr4: gpr4-gpio-bank {
 		gpio-controller;
 		#gpio-cells = <2>;
 		interrupt-controller;

@@ -27,6 +27,7 @@
 		/* index into exynos7880_pin_ctrl[] (Linux pinctrl-exynos-arm64.c) */
 		pinctrl0 = &pinctrl_alive;
 		pinctrl1 = &pinctrl_ccore;
+		pinctrl4 = &pinctrl_fsys;
 		pinctrl5 = &pinctrl_nfc;
 		pinctrl6 = &pinctrl_top;
 	};
@@ -131,6 +132,26 @@
 		clock-output-names = "fsys_mmc0_ciu_fixed";
 	};
 
+	/*
+	 * K8: SDIO host (Wi-Fi). Same TEMPORARY approach as mmc0. S-Boot never
+	 * used this controller, so a5-diag mmc1 prints the real CMU_CCORE /
+	 * CMU_FSYS state and turns the gates on; the CIU value below is the
+	 * same BUS_PLL/2/2 guess as mmc0 until a5-diag has measured it.
+	 */
+	clk_fsys_mmc1_biu: clock-fsys-mmc1-biu {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <200000000>;
+		clock-output-names = "fsys_mmc1_biu_fixed";
+	};
+
+	clk_fsys_mmc1_ciu: clock-fsys-mmc1-ciu {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <399750000>;
+		clock-output-names = "fsys_mmc1_ciu_fixed";
+	};
+
 	/* [D] 26 MHz crystal; [M] node name gives the "oscclk" clock name */
 	oscclk: oscclk {
 		compatible = "fixed-clock";
@@ -212,6 +233,13 @@
 			interrupts = <GIC_SPI 327 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
+		/* [D] pinctrl_4: pinctrl@13750000 (FSYS), GPIO EINT on SPI 250 */
+		pinctrl_fsys: pinctrl@13750000 {
+			compatible = "samsung,exynos7880-pinctrl";
+			reg = <0x13750000 0x1000>;
+			interrupts = <GIC_SPI 250 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
 		/* [D] pinctrl_5: pinctrl@139C0000 (NFC), GPIO EINT on SPI 439 */
 		pinctrl_nfc: pinctrl@139c0000 {
 			compatible = "samsung,exynos7880-pinctrl";
@@ -256,6 +284,20 @@
 
 			clock-names = "biu", "ciu";
 			clocks = <&clk_fsys_mmc0_biu>, <&clk_fsys_mmc0_ciu>;
+
+			status = "disabled";
+		};
+
+		/* [D] dwmmc_1: dwmmc1@13550000, SPI 246 */
+		mmc1: mmc@13550000 {
+			compatible = "samsung,exynos7870-dw-mshc";
+			reg = <0x13550000 0x2000>;
+			interrupts = <GIC_SPI 246 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			clock-names = "biu", "ciu";
+			clocks = <&clk_fsys_mmc1_biu>, <&clk_fsys_mmc1_ciu>;
 
 			status = "disabled";
 		};

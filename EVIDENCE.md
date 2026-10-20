@@ -1309,3 +1309,40 @@ compile; a5-diag builds with -Wall -Wextra -Werror.
 TWRP Install Image -> Boot, no eMMC write. In rescue (Volume Down): `a5-diag
 touch`, `dmesg | grep -i 'zinitix\|s2mpu05\|vtouch\|i2c'`, then touch the screen
 and watch `touch X,Y` lines. Photo/log into EVIDENCE.
+
+## K8a. Wi-Fi hardware bring-up: built 2026-10-20, NOT yet tested (branch android-k8, on top of android-k1)
+
+**Scope.** Step a of ANDROID-K8-WIFI-NOTES.md only: make the QCA9377 SDIO
+card show up on mmc1. No firmware, no wlan0 yet. Compiled only; no flashing,
+no eMMC write.
+
+**Changes.**
+- `exynos7880.dtsi`: `pinctrl4 = &pinctrl_fsys` (0x13750000, SPI 250, from
+  Samsung's pinctrl_4), `mmc1` (0x13550000, SPI 246, `samsung,exynos7870-dw-mshc`,
+  no SMU: only mmc0 is the eMMC) and fixed biu/ciu clocks (200 / 399.75 MHz, same
+  guess as mmc0 until measured).
+- `exynos7880-pinctrl.dtsi`: banks gpr0-gpr4 on FSYS.
+- `exynos7880-a5y17lte.dts`: `wlan_dcdc` regulator-fixed on gpd3-3 (4 ms),
+  `wlan_pwrseq` mmc-pwrseq-simple on gpd3-6 (WLAN_EN), `&mmc1` 4-bit, non-removable,
+  cap-sdio-irq, 25 MHz high-speed, sdr timing `<0 2>` (Samsung `<3 0 2 0>`), pins
+  sd1_clk/cmd/bus4 (gpr2-0, gpr2-1, gpr3-0..3, function 2, drive SR3, data/cmd pull-up).
+- Config: PWRSEQ_SIMPLE, CFG80211, MAC80211, WLAN_VENDOR_ATH, ATH10K, ATH10K_SDIO.
+- `a5-diag mmc1`: prints CMU_CCORE mux/div/enable (0x28c/0x48c/0x88c) and the
+  CMU_FSYS gate (0x818), turns gates on; returns 10 if it changed anything,
+  then `init` re-binds `13550000.mmc` and lists the SDIO card and net devices.
+
+**Checked.** All config symbols stick; DTB builds with W=1 clean; sdio.o and
+pwrseq_simple.o compile; a5-diag builds with -Wall -Wextra -Werror.
+
+**Assumptions to verify on the phone** (these are what can go wrong):
+1. The gate registers/bits in the notes (bit 0 of each enable). The a5-diag
+   output shows before/after values; if nothing enables, the registers are wrong.
+2. The real CIU frequency (the a5-diag line prints it); fix the fixed clock.
+3. Samsung pin-drv value 2 vs our SR3 constant (EXYNOS5433 DRV_FAST_SR3 = 2).
+4. QCA9377 needs WLAN_EN high only after power; pwrseq holds it low until the
+   host powers up. Samsung's pin config sets WLAN_EN as output, value 0.
+
+**Test.** `MILESTONE=k8a ./build-mainline.sh` (after k1 is tested, or build both
+together), flash with TWRP -> Boot; in rescue: `a5-diag mmc1`,
+`dmesg | grep -i 'mmc1\|sdio\|ath10k'`. Success = "new SDIO card", vendor 0x271.
+Without firmware ath10k will say it can't load firmware; that is expected.

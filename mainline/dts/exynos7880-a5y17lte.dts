@@ -20,6 +20,7 @@
 
 	aliases {
 		mmc0 = &mmc0;
+		mmc1 = &mmc1;
 	};
 
 	chosen {
@@ -186,6 +187,27 @@
 		};
 	};
 
+	/*
+	 * K8: Wi-Fi (Qualcomm QCA9377 over SDIO on mmc1). [D] cnss_dcdc_en:
+	 * regulator-fixed on gpd3-3, startup 4 ms; WLAN_EN gpd3-6 (output,
+	 * low = chip in reset) is driven by mmc-pwrseq-simple.
+	 */
+	wlan_dcdc: regulator-wlan-dcdc {
+		compatible = "regulator-fixed";
+		regulator-name = "cnss_dcdc_en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpd3 3 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <4000>;
+	};
+
+	wlan_pwrseq: pwrseq-wlan {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&gpd3 6 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <10>;
+	};
+
 	/* [D] memory@40000000 0x3E400000 and memory@80000000 0x80000000 (3 GB) */
 	memory@40000000 {
 		device_type = "memory";
@@ -325,5 +347,55 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+};
+
+/*
+ * K8: SDIO host for the Wi-Fi chip. [D] dwmmc1: 4-bit, ciu-div 3, sdr-timing
+ * <3 0 2 0> = mainline <0 2>. Kept conservative: 25 MHz high-speed, no
+ * UHS (the signalling voltage is fixed, Samsung uses use-broken-voltage),
+ * until the card answers and the real CIU clock is known.
+ */
+&mmc1 {
+	bus-width = <4>;
+	non-removable;
+	cap-sdio-irq;
+	cap-sd-highspeed;
+	keep-power-in-suspend;
+	no-sd;
+	no-mmc;
+	max-frequency = <25000000>;
+	fifo-depth = <64>;
+	samsung,dw-mshc-ciu-div = <3>;
+	samsung,dw-mshc-sdr-timing = <0 2>;
+	samsung,dw-mshc-ddr-timing = <1 2>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_bus4>;
+	vmmc-supply = <&wlan_dcdc>;
+	mmc-pwrseq = <&wlan_pwrseq>;
+	status = "okay";
+};
+
+/* [D] sd1_*: FSYS function 2; clk/cmd no pull, drive 2; data pull-up */
+&pinctrl_fsys {
+	sd1_clk: sd1-clk-pins {
+		samsung,pins = "gpr2-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+
+	sd1_cmd: sd1-cmd-pins {
+		samsung,pins = "gpr2-1";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+
+	sd1_bus4: sd1-bus4-pins {
+		samsung,pins = "gpr3-0", "gpr3-1", "gpr3-2", "gpr3-3";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
 	};
 };
