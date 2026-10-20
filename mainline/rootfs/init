@@ -38,6 +38,7 @@ a5-diag info
 a5-diag system
 a5-diag usb
 a5-diag android
+a5-diag touch
 
 # USB device controller: if the PHY/DWC3 failed to probe because a clock was
 # off, a5-diag usb has just turned it on; bind the drivers again.

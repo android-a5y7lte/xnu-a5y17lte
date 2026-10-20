@@ -11,6 +11,7 @@
 #include "exynos7880.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	model = "Samsung Galaxy A5 (2017)";
@@ -117,6 +118,74 @@
 		#size-cells = <0>;
 	};
 
+	/*
+	 * K1: S2MPU05 PMIC (0x66) on Samsung's hsi2c@10610000, pins gpm0-0
+	 * (SDA) / gpm0-1 (SCL) [D]; its interrupt is gpa0-2. The hsi2c needs
+	 * CMU_PERI, so both buses are GPIO bit-banged for now. Only what the
+	 * touch panel needs is described: LDO32 (vtouch_2.8v, boot-on) and
+	 * LDO35 (vtouch_3.3v). Every other rail stays as S-Boot left it (the
+	 * regulator core only knows the rails listed here).
+	 */
+	i2c_pmic: i2c-gpio-pmic {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpm0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpm0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pmic@66 {
+			compatible = "samsung,s2mpu05-pmic";
+			reg = <0x66>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&pmic_irq>;
+
+			regulators {
+				vtouch_2v8: ldo32 {
+					regulator-name = "vtouch_2.8v";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+					regulator-boot-on;
+				};
+
+				vtouch_3v3: ldo35 {
+					regulator-name = "vtouch_3.3v";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * K1: Zinitix ZT7538 touch controller (bt532 family) at 0x20 on
+	 * i2c@13890000, pins gpc2-0 (SDA) / gpc2-1 (SCL), attention gpa0-5
+	 * [D]. 1080x1920 as the panel.
+	 */
+	i2c_touch: i2c-gpio-touch {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpc2 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpc2 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <3>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		touchscreen@20 {
+			compatible = "zinitix,bt532";
+			reg = <0x20>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&touch_irq>;
+			vdd-supply = <&vtouch_3v3>;
+			vddo-supply = <&vtouch_2v8>;
+			touchscreen-size-x = <1080>;
+			touchscreen-size-y = <1920>;
+		};
+	};
+
 	/* [D] memory@40000000 0x3E400000 and memory@80000000 0x80000000 (3 GB) */
 	memory@40000000 {
 		device_type = "memory";
@@ -215,6 +284,21 @@
 
 /* [D] key-power/voldown/volup/home: function 0xf (EINT), pud 0, drv 0 */
 &pinctrl_alive {
+	/* [D] PMIC interrupt gpa0-2, touch attention gpa0-5 (function 0xf) */
+	pmic_irq: pmic-irq-pins {
+		samsung,pins = "gpa0-2";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	touch_irq: touch-irq-pins {
+		samsung,pins = "gpa0-5";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
 	key_power: key-power-pins {
 		samsung,pins = "gpa0-0";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;

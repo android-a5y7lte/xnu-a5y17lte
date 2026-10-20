@@ -26,6 +26,8 @@
 	aliases {
 		/* index into exynos7880_pin_ctrl[] (Linux pinctrl-exynos-arm64.c) */
 		pinctrl0 = &pinctrl_alive;
+		pinctrl1 = &pinctrl_ccore;
+		pinctrl5 = &pinctrl_nfc;
 		pinctrl6 = &pinctrl_top;
 	};
 
@@ -201,6 +203,20 @@
 				mode-download = <0x12345671>;
 				mode-recovery = <0x12345674>;
 			};
+		};
+
+		/* [D] pinctrl_1: pinctrl@10630000 (CCORE), GPIO EINT on SPI 327 */
+		pinctrl_ccore: pinctrl@10630000 {
+			compatible = "samsung,exynos7880-pinctrl";
+			reg = <0x10630000 0x1000>;
+			interrupts = <GIC_SPI 327 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/* [D] pinctrl_5: pinctrl@139C0000 (NFC), GPIO EINT on SPI 439 */
+		pinctrl_nfc: pinctrl@139c0000 {
+			compatible = "samsung,exynos7880-pinctrl";
+			reg = <0x139c0000 0x1000>;
+			interrupts = <GIC_SPI 439 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
 		/*

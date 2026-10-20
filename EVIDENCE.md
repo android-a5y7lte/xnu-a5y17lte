@@ -1263,3 +1263,49 @@ the last run's description was not given).
 Volume Down hold missed. (2) If rescue works, `mount -o remount,ro /` + `reboot
 -f` in Nura. (3) If rescue hangs too, write INFORM3 = 0x12345670 (PMU only)
 before the reboot.
+
+## K1. Touchscreen: built 2026-10-20, NOT yet tested on the phone (branch android-k1)
+
+**What.** Device tree, config and a5-diag for the Zinitix ZT7538 touch panel.
+Compiled only; nothing flashed, no eMMC write.
+
+**Hardware facts used** (Samsung universal7880 `exynos7880-a5y17lte_common.dtsi`):
+touch controller `zinitix,bt532_ts_device` at 0x20 on i2c@13890000, SDA gpc2-0 /
+SCL gpc2-1 (NFC pin controller, 0x139c0000, SPI 439), attention gpa0-5, panel
+1080x1920. Supplies: S2MPU05 LDO32 `vtouch_2.8v` (boot-on) and LDO35
+`vtouch_3.3v`. The S2MPU05 PMIC is at 0x66 on hsi2c@10610000, SDA gpm0-0 / SCL
+gpm0-1 (CCORE pin controller, 0x10630000, SPI 327), interrupt gpa0-2.
+
+**Changes.**
+- `exynos7880.dtsi`: `pinctrl1 = &pinctrl_ccore`, `pinctrl5 = &pinctrl_nfc` and
+  the two controller nodes (the kernel patch 0002 already has banks gpm0, gpc2).
+- `exynos7880-pinctrl.dtsi`: banks `gpm0` and `gpc2`.
+- `exynos7880-a5y17lte.dts`: pin groups `pmic_irq`, `touch_irq`; i2c-gpio buses
+  `i2c-gpio-pmic` (pmic@66 `samsung,s2mpu05-pmic`, regulators ldo32/ldo35 only)
+  and `i2c-gpio-touch` (`zinitix,bt532`, vdd = LDO35, vddo = LDO32, 1080x1920,
+  falling edge on gpa0-5). GPIO buses because the hsi2c needs CMU_PERI.
+- `a5y17lte.config`: MFD_SEC_I2C, REGULATOR_S2MPS11, INPUT_TOUCHSCREEN,
+  TOUCHSCREEN_ZINITIX (all built in; MFD_SEC_CORE follows).
+- `a5-diag touch` (also run at boot): lists the PMIC / touch i2c devices and
+  their driver, the `vtouch` regulators and the input devices. The key loop
+  now prints `touch X,Y` and `touch up`.
+
+**Checked.** allnoconfig + a5y17lte.config keeps all six symbols; DTB builds
+with W=1 without warnings; zinitix.o, sec-i2c.o, sec-common.o, s2mps11.o
+compile; a5-diag builds with -Wall -Wextra -Werror.
+
+**Risks to watch on the phone.**
+1. Touch driver probe order: the regulators come from the PMIC, so a probe
+   defer is normal; "NOT BOUND" in `a5-diag touch` after a few seconds is not.
+2. Only LDO32/LDO35 are registered; the PMIC driver must not turn other rails
+   off (unlisted rails are untouched). Watch for any new black screen or USB loss.
+3. LDO32 vs LDO35 roles (vdd/vddo) are a guess; the driver enables both, so
+   order should not matter. If it fails, try swapping.
+4. i2c-gpio delay 3 us (about 150 kHz) for the touch bus; slow it if reads fail.
+5. ZT7538 may need the vendor firmware blob/init sequence that mainline's bt541
+   driver doesn't do; the probe may fail with a read error. Record the dmesg.
+
+**Test (tomorrow, PC session).** `MILESTONE=k1 ./build-mainline.sh`, flash with
+TWRP Install Image -> Boot, no eMMC write. In rescue (Volume Down): `a5-diag
+touch`, `dmesg | grep -i 'zinitix\|s2mpu05\|vtouch\|i2c'`, then touch the screen
+and watch `touch X,Y` lines. Photo/log into EVIDENCE.

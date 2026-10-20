@@ -440,11 +440,68 @@ static const char *key_name(int code)
 	}
 }
 
+/*
+ * K1: report the touch chain (PMIC on the gpm0 bus, touch controller on the
+ * gpc2 bus), what bound to what, and the input devices. Always returns 0:
+ * it only reports.
+ */
+static int cmd_touch(void)
+{
+	static const char *const devs[] = {
+		"0-0066", "1-0066", "0-0020", "1-0020", "2-0066", "2-0020",
+	};
+	char path[300], line[160], link[200];
+	struct dirent *e;
+	DIR *d;
+
+	for (unsigned int i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
+		ssize_t n;
+
+		snprintf(path, sizeof(path), "/sys/bus/i2c/devices/%s", devs[i]);
+		if (access(path, F_OK))
+			continue;
+		snprintf(path, sizeof(path), "/sys/bus/i2c/devices/%s/name", devs[i]);
+		read_file(path, line, sizeof(line));
+		snprintf(path, sizeof(path), "/sys/bus/i2c/devices/%s/driver", devs[i]);
+		n = readlink(path, link, sizeof(link) - 1);
+		link[n > 0 ? n : 0] = 0;
+		printf(" touch  : i2c %s %s driver %s\n", devs[i],
+		       line[0] ? line : "?", n > 0 ? strrchr(link, '/') + 1 : "NOT BOUND");
+	}
+	d = opendir("/sys/class/regulator");
+	while (d && (e = readdir(d))) {
+		if (strncmp(e->d_name, "regulator.", 10))
+			continue;
+		snprintf(path, sizeof(path), "/sys/class/regulator/%s/name", e->d_name);
+		read_file(path, line, sizeof(line));
+		if (strncmp(line, "vtouch", 6))
+			continue;
+		printf(" touch  : %s %s", e->d_name, line);
+		snprintf(path, sizeof(path), "/sys/class/regulator/%s/microvolts", e->d_name);
+		read_file(path, line, sizeof(line));
+		printf("          %s uV\n", line[0] ? line : "?");
+	}
+	if (d)
+		closedir(d);
+	d = opendir("/sys/class/input");
+	while (d && (e = readdir(d))) {
+		if (strncmp(e->d_name, "input", 5))
+			continue;
+		snprintf(path, sizeof(path), "/sys/class/input/%s/name", e->d_name);
+		read_file(path, line, sizeof(line));
+		printf(" touch  : %s %s", e->d_name, line);
+	}
+	if (d)
+		closedir(d);
+	return 0;
+}
+
 static int cmd_keys(void)
 {
 	struct pollfd fds[8];
 	int nfds = 0;
 	long long power_down = -1;
+	int tx = -1, ty = -1;
 
 	for (int i = 0; i < 8; i++) {
 		char path[32];
@@ -478,6 +535,20 @@ static int cmd_keys(void)
 			if (!(fds[i].revents & POLLIN))
 				continue;
 			while (read(fds[i].fd, &ev, sizeof(ev)) == sizeof(ev)) {
+				if (ev.type == EV_ABS && ev.code == ABS_MT_POSITION_X)
+					tx = ev.value;
+				else if (ev.type == EV_ABS && ev.code == ABS_MT_POSITION_Y)
+					ty = ev.value;
+				else if (ev.type == EV_ABS && ev.code == ABS_MT_TRACKING_ID &&
+					 ev.value < 0) {
+					printf(" touch       up\n");
+					fflush(stdout);
+					tx = ty = -1;
+				} else if (ev.type == EV_SYN && ev.code == SYN_REPORT &&
+					   tx >= 0 && ty >= 0) {
+					printf(" touch       %d,%d\n", tx, ty);
+					fflush(stdout);
+				}
 				if (ev.type != EV_KEY || ev.value == 2)
 					continue;
 				printf(" %-11s %s\n", key_name(ev.code),
@@ -766,9 +837,11 @@ int main(int argc, char **argv)
 		return cmd_held(atoi(argv[2]));
 	if (!strcmp(argv[1], "lock-except") && argc > 2)
 		return cmd_lock_except(argv[2]);
+	if (!strcmp(argv[1], "touch"))
+		return cmd_touch();
 	if (!strcmp(argv[1], "keys"))
 		return cmd_keys();
 usage:
-	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|held MS|lock-except NAME|keys\n");
+	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|held MS|lock-except NAME|keys\n");
 	return 2;
 }
