@@ -26,6 +26,75 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
+# Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
+# 1080x1920). A banner is a pixel-art Tux (2 console cells per pixel, 12x10)
+# with the label beside it on one line, white on the banner colour; a lit
+# pixel is a space with a coloured background (the font has no block glyphs).
+# One copy is drawn at the top when init starts (it scrolls away with the
+# log), one is pinned at the bottom: the log scrolls in a region above it, and
+# the region is never reset, so it also stays through Nura's boot and login.
+# Green = kernel mode, red = rescue (label and penguin). Beak and feet are
+# yellow (the console's orange). Full-screen programs that reset the scroll
+# region can overwrite the pinned copy.
+COLS=67
+ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
+[ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
+BH=10		# banner height in rows
+
+# Tux, 12 pixels wide: G body, B beak and feet, . empty (the eyes and the
+# belly are empty holes in the body)
+TUXW=24
+pixline() {	# pixel row, body background code -> 2 cells per pixel
+	local r=$1 body beak out= c
+	body=$(printf '\033[%sm  \033[0m' "$2")
+	beak=$(printf '\033[43m  \033[0m')
+	while [ -n "$r" ]; do
+		c=${r%"${r#?}"}; r=${r#?}
+		case $c in
+		G) out="$out$body";;
+		B) out="$out$beak";;
+		*) out="$out  ";;
+		esac
+	done
+	printf '%s' "$out"
+}
+
+draw_banner() {	# first row, colour (red|green), label; cursor and region kept
+	local row=$1 bg=42 word=$3 i=1 pl ban= x0
+	[ "$2" = red ] && bg=41
+	x0=$(( (COLS - TUXW - 3 - ${#word} - 2) / 2 ))
+	while read -r pl; do
+		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH' $((row + i - 1)) \
+			$((row + i - 1)) $((x0 + 1)))$(pixline "$pl" $bg)"
+		[ $i -eq 4 ] && ban="$ban$(printf '   \033[1;37;%sm %s \033[0m' $bg "$word")"
+		i=$((i + 1))
+	done <<'TUX'
+...GGGGGG...
+..GGGGGGGG..
+..GG.GG.GG..
+..GGGBBGGG..
+.GGGGGGGGGG.
+GGGG....GGGG
+GGG......GGG
+.GGG....GGG.
+..GGG..GGG..
+.BBBB..BBBB.
+TUX
+	printf '\0337%s\0338' "$ban"
+}
+
+banner() {	# colour, label: the pinned copy at the bottom
+	printf '\033[%d;1H\033[2K' $((ROWS - BH))
+	draw_banner $((ROWS - BH + 1)) "$@"
+}
+
+# clear; green banner at the top, then the log scrolls from below it, and
+# the same banner pinned at the bottom
+printf '\033[r\033[2J'
+draw_banner 1 green "KERNEL MODE"
+banner green "KERNEL MODE"
+printf '\033[1;%dr\033[%d;1H' $((ROWS - BH - 1)) $((BH + 2))
+
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
 stty -echo -icanon 2>/dev/null
@@ -184,6 +253,7 @@ case $? in
 	echo " rescue : Nura did not start" ;;
 esac
 echo 1 > /sys/block/mmcblk0/force_ro	# rescue: the whole eMMC read-only
+banner red "RESCUE MODE"
 
 if ifconfig usb0 2>/dev/null | grep -q 'inet addr:172.16.42.1'; then
 	touch /tmp/udhcpd.leases
