@@ -112,110 +112,12 @@
 		};
 	};
 
-	/*
-	 * TEMPORARY: there is no Exynos7880 clock driver yet, so the eMMC
-	 * bus/card clocks are fixed clocks. S-Boot leaves them running.
-	 * CIU measured on the phone (EVIDENCE.md 17b): CMU_CCORE MMC0 mux =
-	 * BUS_PLL/2, div = 2, BUS_PLL = 26 MHz * 246 / 4 = 1599 MHz, so
-	 * 1599 / 2 / 2 = 399.75 MHz. Replace with CMU clocks later.
-	 */
-	clk_fsys_mmc0_biu: clock-fsys-mmc0-biu {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <200000000>;
-		clock-output-names = "fsys_mmc0_biu_fixed";
-	};
-
-	clk_fsys_mmc0_ciu: clock-fsys-mmc0-ciu {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <399750000>;
-		clock-output-names = "fsys_mmc0_ciu_fixed";
-	};
-
-	/*
-	 * K8: SDIO host (Wi-Fi). Same TEMPORARY approach as mmc0: fixed clocks.
-	 * S-Boot never uses this controller, so U-Boot's boot.cmd sets its
-	 * clock chain before Linux starts: CCORE mux BUS_PLL/2, ratio 4, so
-	 * CIU = 1599 / 2 / 4 = 199.875 MHz (Samsung runs it at 200 MHz);
-	 * `a5-diag mmc1` prints the real values.
-	 */
-	clk_fsys_mmc1_biu: clock-fsys-mmc1-biu {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <200000000>;
-		clock-output-names = "fsys_mmc1_biu_fixed";
-	};
-
-	clk_fsys_mmc1_ciu: clock-fsys-mmc1-ciu {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <199875000>;
-		clock-output-names = "fsys_mmc1_ciu_fixed";
-	};
-
-	/*
-	 * K5: CMU_G3D's "switch" input is CCORE_GATE_CLKCMU_G3D_SWITCH on
-	 * Exynos7880 (BUS_PLL/2 / (div + 1), CCORE +0x460 / +0x860), which has no
-	 * Linux driver yet. Fixed stand-in under the CMU_MIF output name the
-	 * Exynos7870 CMU_G3D driver expects, like the CMU_FSYS inputs below.
-	 * The frequency is a placeholder until `a5-diag gpu` has read the divider.
-	 */
-	clk_g3d_switch: clock-g3d-switch {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <399750000>;
-		clock-output-names = "gout_mif_cmu_g3d_switch";
-	};
-
-	/*
-	 * K9: UART_BTWIFIFM (Bluetooth UART, Samsung serial_0 @13810000). No
-	 * CMU_PERI/CMU_CCORE driver yet, so U-Boot's boot.cmd sets the baud
-	 * clock: CCORE mux BUS_PLL/2, ratio 16 -> 799.5 / 16 = 49.96875 MHz.
-	 * The bus clock (PERI PCLK) only gates register access here.
-	 */
-	clk_peri_uart_bt_pclk: clock-peri-uart-bt-pclk {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <100000000>;
-		clock-output-names = "peri_uart_bt_pclk_fixed";
-	};
-
-	clk_peri_uart_bt_baud: clock-peri-uart-bt-baud {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <49968750>;
-		clock-output-names = "peri_uart_bt_baud_fixed";
-	};
-
 	/* [D] 26 MHz crystal; [M] node name gives the "oscclk" clock name */
 	oscclk: oscclk {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <26000000>;
 		clock-output-names = "oscclk";
-	};
-
-	/*
-	 * TEMPORARY: the two CMU_FSYS inputs come from CMU_CCORE on Exynos7880
-	 * ([P] CCORE_GATE_CLKCMU_FSYS_BUS / _USB20DRD_REFCLK), which has no
-	 * Linux driver yet. The Exynos7870 CMU_FSYS driver looks its parents up
-	 * by the CMU_MIF clock names, hence these output names. S-Boot leaves
-	 * them running. Rates measured on the phone (EVIDENCE.md 18a):
-	 * FSYS_BUS = BUS_PLL/2 / 3 = 266.5 MHz, USB20DRD = BUS_PLL/2 / 16.
-	 */
-	clk_ccore_fsys_bus: clock-ccore-fsys-bus {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <266500000>;
-		clock-output-names = "gout_mif_cmu_fsys_bus";
-	};
-
-	clk_ccore_fsys_usb20drd: clock-ccore-fsys-usb20drd {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <49968750>;
-		clock-output-names = "gout_mif_cmu_fsys_usb20drd_refclk";
 	};
 
 	/* [D] psci: method smc, cpu_suspend 0xC4000001 (same IDs as [M]) */
@@ -277,11 +179,56 @@
 			interrupts = <GIC_SPI 422 IRQ_TYPE_LEVEL_HIGH>;
 
 			clock-names = "uart", "clk_uart_baud0";
-			clocks = <&clk_peri_uart_bt_pclk>, <&clk_peri_uart_bt_baud>;
+			clocks = <&cmu_peri CLK_GOUT_PERI_UART1_PCLK>,
+				 <&cmu_peri CLK_GOUT_PERI_UART1_EXT_UCLK>;
 
 			samsung,uart-fifosize = <256>;
 
 			status = "disabled";
+		};
+
+		/*
+		 * K2: [P] CMU_CCORE (0x10680000) is the Exynos7880 counterpart of
+		 * the Exynos7870 CMU_MIF (BUS_PLL, MEDIA_PLL and the inputs of all
+		 * other CMUs); kernel patch 0009. Its outputs keep the CMU_MIF
+		 * names and IDs, so the 7870 CMU_FSYS, CMU_G3D and CMU_PERI
+		 * drivers take them unchanged.
+		 */
+		cmu_ccore: clock-controller@10680000 {
+			compatible = "samsung,exynos7880-cmu-ccore";
+			reg = <0x10680000 0x1000>;
+			#clock-cells = <1>;
+
+			clock-names = "oscclk";
+			clocks = <&oscclk>;
+		};
+
+		/*
+		 * K2: [P] CMU_PERI (0x101f0000): every Exynos7870 CMU_PERI clock has
+		 * the same offset and bit on Exynos7880 (checked against
+		 * S5E7880-cmusfr.h/-cmu.c). Samsung names: UART_SENSOR = uart0,
+		 * UART_BTWIFIFM = uart1, UART_DEBUG = uart2; SPI_ESE = spi0,
+		 * REARFROM = spi1, FRONTFROM = spi2, VOICEPROCESSOR = spi3,
+		 * SENSORHUB = spi4.
+		 */
+		cmu_peri: clock-controller@101f0000 {
+			compatible = "samsung,exynos7880-cmu-peri",
+				     "samsung,exynos7870-cmu-peri";
+			reg = <0x101f0000 0x1000>;
+			#clock-cells = <1>;
+
+			clock-names = "oscclk", "bus", "spi0", "spi1", "spi2",
+				      "spi3", "spi4", "uart0", "uart1", "uart2";
+			clocks = <&oscclk>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_BUS>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_SPI0>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_SPI1>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_SPI2>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_SPI3>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_SPI4>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_UART0>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_UART1>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_PERI_UART2>;
 		};
 
 		/*
@@ -304,12 +251,13 @@
 		 * `a5-diag gpu` shows the domain state.
 		 */
 		cmu_g3d: clock-controller@11460000 {
-			compatible = "samsung,exynos7870-cmu-g3d";
+			compatible = "samsung,exynos7880-cmu-g3d",
+				     "samsung,exynos7870-cmu-g3d";
 			reg = <0x11460000 0x1000>;
 			#clock-cells = <1>;
 
 			clock-names = "oscclk", "switch";
-			clocks = <&oscclk>, <&clk_g3d_switch>;
+			clocks = <&oscclk>, <&cmu_ccore CLK_GOUT_MIF_CMU_G3D_SWITCH>;
 			power-domains = <&pd_g3d>;
 
 			status = "disabled";
@@ -382,7 +330,8 @@
 			#size-cells = <0>;
 
 			clock-names = "biu", "ciu";
-			clocks = <&clk_fsys_mmc0_biu>, <&clk_fsys_mmc0_ciu>;
+			clocks = <&cmu_fsys CLK_GOUT_FSYS_MMC0_ACLK>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_FSYS_MMC0>;
 
 			status = "disabled";
 		};
@@ -396,7 +345,8 @@
 			#size-cells = <0>;
 
 			clock-names = "biu", "ciu";
-			clocks = <&clk_fsys_mmc1_biu>, <&clk_fsys_mmc1_ciu>;
+			clocks = <&cmu_fsys CLK_GOUT_FSYS_MMC1_ACLK>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_FSYS_MMC1>;
 
 			status = "disabled";
 		};
@@ -461,8 +411,8 @@
 			#clock-cells = <1>;
 
 			clock-names = "oscclk", "bus", "usb20drd";
-			clocks = <&oscclk>, <&clk_ccore_fsys_bus>,
-				 <&clk_ccore_fsys_usb20drd>;
+			clocks = <&oscclk>, <&cmu_ccore CLK_GOUT_MIF_CMU_FSYS_BUS>,
+				 <&cmu_ccore CLK_GOUT_MIF_CMU_FSYS_USB20DRD_REFCLK>;
 		};
 
 		/* [D] gic: interrupt-controller@106E1000, 4 regions, PPI 9 */

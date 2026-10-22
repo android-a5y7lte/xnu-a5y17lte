@@ -1,0 +1,52 @@
+From 3598af92770c2fc28a1fc477f984d5353bc016be Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Fri, 23 Oct 2026 00:43:16 +0300
+Subject: [PATCH 8/9] dt-bindings: clock: samsung,exynos7870-cmu: add
+ Exynos7880 CMU_CCORE, G3D and PERI
+
+The Exynos7880 CMU_CCORE takes the place of the Exynos7870 CMU_MIF: it
+holds BUS_PLL and MEDIA_PLL and generates the inputs of the other CMUs,
+with the same register layout for those outputs. Its CMU_G3D and
+CMU_PERI are register compatible with the Exynos7870 ones, so they use
+the Exynos7870 compatibles as fallback, like CMU_FSYS already does.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ .../bindings/clock/samsung,exynos7870-cmu.yaml        | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/Documentation/devicetree/bindings/clock/samsung,exynos7870-cmu.yaml b/Documentation/devicetree/bindings/clock/samsung,exynos7870-cmu.yaml
+index 4e11ae99e..b27978475 100644
+--- a/Documentation/devicetree/bindings/clock/samsung,exynos7870-cmu.yaml
++++ b/Documentation/devicetree/bindings/clock/samsung,exynos7870-cmu.yaml
+@@ -32,9 +32,16 @@ properties:
+           - samsung,exynos7870-cmu-isp
+           - samsung,exynos7870-cmu-mfcmscl
+           - samsung,exynos7870-cmu-peri
++          - samsung,exynos7880-cmu-ccore
+       - items:
+           - const: samsung,exynos7880-cmu-fsys
+           - const: samsung,exynos7870-cmu-fsys
++      - items:
++          - const: samsung,exynos7880-cmu-g3d
++          - const: samsung,exynos7870-cmu-g3d
++      - items:
++          - const: samsung,exynos7880-cmu-peri
++          - const: samsung,exynos7870-cmu-peri
+ 
+   clocks:
+     minItems: 1
+@@ -62,7 +69,9 @@ allOf:
+       properties:
+         compatible:
+           contains:
+-            const: samsung,exynos7870-cmu-mif
++            enum:
++              - samsung,exynos7870-cmu-mif
++              - samsung,exynos7880-cmu-ccore
+     then:
+       properties:
+         clocks:
+-- 
+2.43.0
+

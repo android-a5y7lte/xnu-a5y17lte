@@ -1,0 +1,397 @@
+From 5fb9b490c26ca8676a4b2daa1990e97e62c813f5 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Fri, 23 Oct 2026 00:43:17 +0300
+Subject: [PATCH 9/9] clk: samsung: exynos7870: add Exynos7880 CMU_CCORE
+
+Exynos7880 has no CMU_MIF; its CMU_CCORE holds BUS_PLL and MEDIA_PLL and
+generates the clocks for the other CMUs. Those outputs (muxes 0x264-0x2cc,
+dividers 0x460-0x4cc, gates 0x860-0x8cc) and the BUSD, APB and HSI2C
+dividers use the same offsets and bit fields as the Exynos7870 CMU_MIF;
+the PLL and BUSD muxes, the HSI2C and ADC_IF gates differ, and there is
+no MEM_PLL. Register offsets and fields were checked one by one against
+the vendor kernel's S5E7880-cmusfr.h and S5E7880-cmu.c.
+
+Keep the CMU_MIF clock names and IDs, so the CMU_FSYS, CMU_G3D and
+CMU_PERI drivers, which find their parents by those names, are shared
+with Exynos7870 unchanged.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/clk/samsung/clk-exynos7870.c | 354 +++++++++++++++++++++++++++
+ 1 file changed, 354 insertions(+)
+
+diff --git a/drivers/clk/samsung/clk-exynos7870.c b/drivers/clk/samsung/clk-exynos7870.c
+index fd39ec778..df1633eab 100644
+--- a/drivers/clk/samsung/clk-exynos7870.c
++++ b/drivers/clk/samsung/clk-exynos7870.c
+@@ -734,6 +734,357 @@ static const struct samsung_cmu_info mif_cmu_info __initconst = {
+ 	.nr_clk_ids		= MIF_NR_CLK,
+ };
+ 
++/*
++ * Register offsets for Exynos7880 CMU_CCORE (0x10680000)
++ *
++ * CMU_CCORE is the Exynos7880 counterpart of the CMU_MIF above: BUS_PLL,
++ * MEDIA_PLL and every CMU_* output (mux 0x264-0x2cc, divider 0x460-0x4cc,
++ * gate 0x860-0x8cc) use the same offsets and bit fields. It differs in the
++ * PLL and BUSD mux registers and the HSI2C/ADC_IF gates, and has no MEM_PLL.
++ * The clocks keep the CMU_MIF names and IDs, so the CMUs they feed (FSYS,
++ * G3D, PERI, ...) are shared with Exynos7870.
++ */
++#define CLK_CON_GAT_CCORE_MUX_MEDIA_PLL			0x0220
++#define CLK_CON_GAT_CCORE_MUX_MEDIA_PLL_CON		0x0220
++#define CLK_CON_GAT_CCORE_MUX_BUS_PLL			0x0224
++#define CLK_CON_GAT_CCORE_MUX_BUS_PLL_CON		0x0224
++#define CLK_CON_GAT_CCORE_MUX_BUSD			0x0240
++#define CLK_CON_MUX_CCORE_BUSD				0x0240
++#define CLK_CON_GAT_CCORE_WRAP_ADC_IF_OSC_SYS		0x0800
++#define CLK_CON_GAT_CCORE_HSI2C_AP_PCLKS		0x0838
++#define CLK_CON_GAT_CCORE_HSI2C_CP_PCLKS		0x0838
++#define CLK_CON_GAT_CCORE_WRAP_ADC_IF_PCLK_S0		0x0838
++#define CLK_CON_GAT_CCORE_WRAP_ADC_IF_PCLK_S1		0x0838
++#define CLK_CON_GAT_CCORE_HSI2C_AP_PCLKM		0x084c
++#define CLK_CON_GAT_CCORE_HSI2C_CP_PCLKM		0x084c
++#define CLK_CON_GAT_CCORE_HSI2C_IPCLK			0x084c
++#define CLK_CON_GAT_CCORE_HSI2C_ITCLK			0x084c
++#define CLK_CON_GAT_CCORE_CP_PCLK_HSI2C			0x084c
++#define CLK_CON_GAT_CCORE_CP_PCLK_HSI2C_BAT_0		0x084c
++#define CLK_CON_GAT_CCORE_CP_PCLK_HSI2C_BAT_1		0x084c
++
++static const unsigned long ccore_clk_regs[] __initconst = {
++	PLL_LOCKTIME_MIF_MEDIA_PLL,
++	PLL_LOCKTIME_MIF_BUS_PLL,
++	PLL_CON0_MIF_MEDIA_PLL,
++	PLL_CON0_MIF_BUS_PLL,
++	CLK_CON_GAT_CCORE_MUX_MEDIA_PLL,
++	CLK_CON_GAT_CCORE_MUX_BUS_PLL,
++	CLK_CON_MUX_CCORE_BUSD,
++};
++
++static const struct samsung_fixed_factor_clock ccore_fixed_factor_clks[] __initconst = {
++	FFACTOR(0, "ffac_mif_mux_bus_pll_div2", "gout_mif_mux_bus_pll_con", 1, 2,
++		0),
++	FFACTOR(0, "ffac_mif_mux_media_pll_div2", "gout_mif_mux_media_pll_con",
++		1, 2, 0),
++};
++
++static const struct samsung_pll_clock ccore_pll_clks[] __initconst = {
++	PLL(pll_1417x, CLK_FOUT_MIF_BUS_PLL, "fout_mif_bus_pll", "oscclk",
++	    PLL_LOCKTIME_MIF_BUS_PLL, PLL_CON0_MIF_BUS_PLL, NULL),
++	PLL(pll_1417x, CLK_FOUT_MIF_MEDIA_PLL, "fout_mif_media_pll", "oscclk",
++	    PLL_LOCKTIME_MIF_MEDIA_PLL, PLL_CON0_MIF_MEDIA_PLL, NULL),
++};
++
++PNAME(mout_ccore_busd_p)			= { "ffac_mif_mux_bus_pll_div2",
++						    "ffac_mif_mux_media_pll_div2" };
++
++static const struct samsung_mux_clock ccore_mux_clks[] __initconst = {
++	MUX(CLK_MOUT_MIF_CMU_DISPAUD_BUS, "mout_mif_cmu_dispaud_bus",
++	    mout_mif_cmu_dispaud_bus_p, CLK_CON_MUX_MIF_CMU_DISPAUD_BUS, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_DISPAUD_DECON_ECLK,
++	    "mout_mif_cmu_dispaud_decon_eclk",
++	    mout_mif_cmu_dispaud_decon_eclk_p,
++	    CLK_CON_MUX_MIF_CMU_DISPAUD_DECON_ECLK, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_DISPAUD_DECON_VCLK,
++	    "mout_mif_cmu_dispaud_decon_vclk",
++	    mout_mif_cmu_dispaud_decon_vclk_p,
++	    CLK_CON_MUX_MIF_CMU_DISPAUD_DECON_VCLK, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_FSYS_BUS, "mout_mif_cmu_fsys_bus",
++	    mout_mif_cmu_fsys_bus_p, CLK_CON_MUX_MIF_CMU_FSYS_BUS, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_FSYS_MMC0, "mout_mif_cmu_fsys_mmc0",
++	    mout_mif_cmu_fsys_mmc0_p, CLK_CON_MUX_MIF_CMU_FSYS_MMC0, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_FSYS_MMC1, "mout_mif_cmu_fsys_mmc1",
++	    mout_mif_cmu_fsys_mmc1_p, CLK_CON_MUX_MIF_CMU_FSYS_MMC1, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_FSYS_MMC2, "mout_mif_cmu_fsys_mmc2",
++	    mout_mif_cmu_fsys_mmc2_p, CLK_CON_MUX_MIF_CMU_FSYS_MMC2, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_FSYS_USB20DRD_REFCLK,
++	    "mout_mif_cmu_fsys_usb20drd_refclk",
++	    mout_mif_cmu_fsys_usb20drd_refclk_p,
++	    CLK_CON_MUX_MIF_CMU_FSYS_USB20DRD_REFCLK, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_CAM, "mout_mif_cmu_isp_cam",
++	    mout_mif_cmu_isp_cam_p, CLK_CON_MUX_MIF_CMU_ISP_CAM, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_ISP, "mout_mif_cmu_isp_isp",
++	    mout_mif_cmu_isp_isp_p, CLK_CON_MUX_MIF_CMU_ISP_ISP, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_SENSOR0, "mout_mif_cmu_isp_sensor0",
++	    mout_mif_cmu_isp_sensor0_p, CLK_CON_MUX_MIF_CMU_ISP_SENSOR0, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_SENSOR1, "mout_mif_cmu_isp_sensor1",
++	    mout_mif_cmu_isp_sensor1_p, CLK_CON_MUX_MIF_CMU_ISP_SENSOR1, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_SENSOR2, "mout_mif_cmu_isp_sensor2",
++	    mout_mif_cmu_isp_sensor2_p, CLK_CON_MUX_MIF_CMU_ISP_SENSOR2, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_ISP_VRA, "mout_mif_cmu_isp_vra",
++	    mout_mif_cmu_isp_vra_p, CLK_CON_MUX_MIF_CMU_ISP_VRA, 12, 2),
++	MUX(CLK_MOUT_MIF_CMU_MFCMSCL_MFC, "mout_mif_cmu_mfcmscl_mfc",
++	    mout_mif_cmu_mfcmscl_mfc_p, CLK_CON_MUX_MIF_CMU_MFCMSCL_MFC, 12, 2),
++	MUX(CLK_MOUT_MIF_CMU_MFCMSCL_MSCL, "mout_mif_cmu_mfcmscl_mscl",
++	    mout_mif_cmu_mfcmscl_mscl_p, CLK_CON_MUX_MIF_CMU_MFCMSCL_MSCL, 12,
++	    2),
++	MUX(CLK_MOUT_MIF_CMU_PERI_BUS, "mout_mif_cmu_peri_bus",
++	    mout_mif_cmu_peri_bus_p, CLK_CON_MUX_MIF_CMU_PERI_BUS, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_SPI0, "mout_mif_cmu_peri_spi0",
++	    mout_mif_cmu_peri_spi0_p, CLK_CON_MUX_MIF_CMU_PERI_SPI0, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_SPI2, "mout_mif_cmu_peri_spi2",
++	    mout_mif_cmu_peri_spi2_p, CLK_CON_MUX_MIF_CMU_PERI_SPI2, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_SPI1, "mout_mif_cmu_peri_spi1",
++	    mout_mif_cmu_peri_spi1_p, CLK_CON_MUX_MIF_CMU_PERI_SPI1, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_SPI4, "mout_mif_cmu_peri_spi4",
++	    mout_mif_cmu_peri_spi4_p, CLK_CON_MUX_MIF_CMU_PERI_SPI4, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_SPI3, "mout_mif_cmu_peri_spi3",
++	    mout_mif_cmu_peri_spi3_p, CLK_CON_MUX_MIF_CMU_PERI_SPI3, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_UART1, "mout_mif_cmu_peri_uart1",
++	    mout_mif_cmu_peri_uart1_p, CLK_CON_MUX_MIF_CMU_PERI_UART1, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_UART2, "mout_mif_cmu_peri_uart2",
++	    mout_mif_cmu_peri_uart2_p, CLK_CON_MUX_MIF_CMU_PERI_UART2, 12, 1),
++	MUX(CLK_MOUT_MIF_CMU_PERI_UART0, "mout_mif_cmu_peri_uart0",
++	    mout_mif_cmu_peri_uart0_p, CLK_CON_MUX_MIF_CMU_PERI_UART0, 12, 1),
++	MUX(CLK_MOUT_MIF_BUSD, "mout_mif_busd", mout_ccore_busd_p,
++	    CLK_CON_MUX_CCORE_BUSD, 12, 1),
++};
++
++static const struct samsung_gate_clock ccore_gate_clks[] __initconst = {
++	GATE(CLK_GOUT_MIF_CMU_DISPAUD_BUS, "gout_mif_cmu_dispaud_bus",
++	     "dout_mif_cmu_dispaud_bus", CLK_CON_GAT_MIF_CMU_DISPAUD_BUS, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_DISPAUD_DECON_ECLK,
++	     "gout_mif_cmu_dispaud_decon_eclk",
++	     "dout_mif_cmu_dispaud_decon_eclk",
++	     CLK_CON_GAT_MIF_CMU_DISPAUD_DECON_ECLK, 0, CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_DISPAUD_DECON_VCLK,
++	     "gout_mif_cmu_dispaud_decon_vclk",
++	     "dout_mif_cmu_dispaud_decon_vclk",
++	     CLK_CON_GAT_MIF_CMU_DISPAUD_DECON_VCLK, 0, CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_FSYS_BUS, "gout_mif_cmu_fsys_bus",
++	     "dout_mif_cmu_fsys_bus", CLK_CON_GAT_MIF_CMU_FSYS_BUS, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_FSYS_MMC0, "gout_mif_cmu_fsys_mmc0",
++	     "dout_mif_cmu_fsys_mmc0", CLK_CON_GAT_MIF_CMU_FSYS_MMC0, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_FSYS_MMC1, "gout_mif_cmu_fsys_mmc1",
++	     "dout_mif_cmu_fsys_mmc1", CLK_CON_GAT_MIF_CMU_FSYS_MMC1, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_FSYS_MMC2, "gout_mif_cmu_fsys_mmc2",
++	     "dout_mif_cmu_fsys_mmc2", CLK_CON_GAT_MIF_CMU_FSYS_MMC2, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_FSYS_USB20DRD_REFCLK,
++	     "gout_mif_cmu_fsys_usb20drd_refclk",
++	     "dout_mif_cmu_fsys_usb20drd_refclk",
++	     CLK_CON_GAT_MIF_CMU_FSYS_USB20DRD_REFCLK, 0, CLK_SET_RATE_PARENT,
++	     0),
++	GATE(CLK_GOUT_MIF_CMU_G3D_SWITCH, "gout_mif_cmu_g3d_switch",
++	     "dout_mif_cmu_g3d_switch", CLK_CON_GAT_MIF_CMU_G3D_SWITCH, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_CAM, "gout_mif_cmu_isp_cam",
++	     "dout_mif_cmu_isp_cam", CLK_CON_GAT_MIF_CMU_ISP_CAM, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_ISP, "gout_mif_cmu_isp_isp",
++	     "dout_mif_cmu_isp_isp", CLK_CON_GAT_MIF_CMU_ISP_ISP, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_SENSOR0, "gout_mif_cmu_isp_sensor0",
++	     "dout_mif_cmu_isp_sensor0", CLK_CON_GAT_MIF_CMU_ISP_SENSOR0, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_SENSOR1, "gout_mif_cmu_isp_sensor1",
++	     "dout_mif_cmu_isp_sensor1", CLK_CON_GAT_MIF_CMU_ISP_SENSOR1, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_SENSOR2, "gout_mif_cmu_isp_sensor2",
++	     "dout_mif_cmu_isp_sensor2", CLK_CON_GAT_MIF_CMU_ISP_SENSOR2, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_ISP_VRA, "gout_mif_cmu_isp_vra",
++	     "dout_mif_cmu_isp_vra", CLK_CON_GAT_MIF_CMU_ISP_VRA, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_MFCMSCL_MFC, "gout_mif_cmu_mfcmscl_mfc",
++	     "dout_mif_cmu_mfcmscl_mfc", CLK_CON_GAT_MIF_CMU_MFCMSCL_MFC, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_MFCMSCL_MSCL, "gout_mif_cmu_mfcmscl_mscl",
++	     "dout_mif_cmu_mfcmscl_mscl", CLK_CON_GAT_MIF_CMU_MFCMSCL_MSCL, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_BUS, "gout_mif_cmu_peri_bus",
++	     "dout_mif_cmu_peri_bus", CLK_CON_GAT_MIF_CMU_PERI_BUS, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_SPI0, "gout_mif_cmu_peri_spi0",
++	     "dout_mif_cmu_peri_spi0", CLK_CON_GAT_MIF_CMU_PERI_SPI0, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_SPI2, "gout_mif_cmu_peri_spi2",
++	     "dout_mif_cmu_peri_spi2", CLK_CON_GAT_MIF_CMU_PERI_SPI2, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_SPI1, "gout_mif_cmu_peri_spi1",
++	     "dout_mif_cmu_peri_spi1", CLK_CON_GAT_MIF_CMU_PERI_SPI1, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_SPI4, "gout_mif_cmu_peri_spi4",
++	     "dout_mif_cmu_peri_spi4", CLK_CON_GAT_MIF_CMU_PERI_SPI4, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_SPI3, "gout_mif_cmu_peri_spi3",
++	     "dout_mif_cmu_peri_spi3", CLK_CON_GAT_MIF_CMU_PERI_SPI3, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_UART1, "gout_mif_cmu_peri_uart1",
++	     "dout_mif_cmu_peri_uart1", CLK_CON_GAT_MIF_CMU_PERI_UART1, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_UART2, "gout_mif_cmu_peri_uart2",
++	     "dout_mif_cmu_peri_uart2", CLK_CON_GAT_MIF_CMU_PERI_UART2, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CMU_PERI_UART0, "gout_mif_cmu_peri_uart0",
++	     "dout_mif_cmu_peri_uart0", CLK_CON_GAT_MIF_CMU_PERI_UART0, 0,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_AP_PCLKM, "gout_mif_hsi2c_ap_pclkm",
++	     "dout_mif_hsi2c", CLK_CON_GAT_CCORE_HSI2C_AP_PCLKM, 0,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_AP_PCLKS, "gout_mif_hsi2c_ap_pclks",
++	     "dout_mif_apb", CLK_CON_GAT_CCORE_HSI2C_AP_PCLKS, 16, CLK_IS_CRITICAL
++	     | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_CP_PCLKM, "gout_mif_hsi2c_cp_pclkm",
++	     "dout_mif_hsi2c", CLK_CON_GAT_CCORE_HSI2C_CP_PCLKM, 1,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_CP_PCLKS, "gout_mif_hsi2c_cp_pclks",
++	     "dout_mif_apb", CLK_CON_GAT_CCORE_HSI2C_CP_PCLKS, 17, CLK_IS_CRITICAL
++	     | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_IPCLK, "gout_mif_hsi2c_ipclk", "dout_mif_hsi2c",
++	     CLK_CON_GAT_CCORE_HSI2C_IPCLK, 2, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_HSI2C_ITCLK, "gout_mif_hsi2c_itclk", "dout_mif_hsi2c",
++	     CLK_CON_GAT_CCORE_HSI2C_ITCLK, 3, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CP_PCLK_HSI2C, "gout_mif_cp_pclk_hsi2c",
++	     "dout_mif_hsi2c", CLK_CON_GAT_CCORE_CP_PCLK_HSI2C, 6, CLK_IS_CRITICAL
++	     | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CP_PCLK_HSI2C_BAT_0, "gout_mif_cp_pclk_hsi2c_bat_0",
++	     "dout_mif_hsi2c", CLK_CON_GAT_CCORE_CP_PCLK_HSI2C_BAT_0, 4,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_CP_PCLK_HSI2C_BAT_1, "gout_mif_cp_pclk_hsi2c_bat_1",
++	     "dout_mif_hsi2c", CLK_CON_GAT_CCORE_CP_PCLK_HSI2C_BAT_1, 5,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_WRAP_ADC_IF_OSC_SYS, "gout_mif_wrap_adc_if_osc_sys",
++	     "oscclk", CLK_CON_GAT_CCORE_WRAP_ADC_IF_OSC_SYS, 2,
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_WRAP_ADC_IF_PCLK_S0, "gout_mif_wrap_adc_if_pclk_s0",
++	     "dout_mif_apb", CLK_CON_GAT_CCORE_WRAP_ADC_IF_PCLK_S0, 22,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_WRAP_ADC_IF_PCLK_S1, "gout_mif_wrap_adc_if_pclk_s1",
++	     "dout_mif_apb", CLK_CON_GAT_CCORE_WRAP_ADC_IF_PCLK_S1, 23,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_BUS_PLL, "gout_mif_mux_bus_pll",
++	     "gout_mif_mux_bus_pll_con", CLK_CON_GAT_CCORE_MUX_BUS_PLL, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_BUS_PLL_CON, "gout_mif_mux_bus_pll_con",
++	     "fout_mif_bus_pll", CLK_CON_GAT_CCORE_MUX_BUS_PLL_CON, 12,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_DISPAUD_BUS, "gout_mif_mux_cmu_dispaud_bus",
++	     "mout_mif_cmu_dispaud_bus", CLK_CON_GAT_MIF_MUX_CMU_DISPAUD_BUS,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_DISPAUD_DECON_ECLK,
++	     "gout_mif_mux_cmu_dispaud_decon_eclk",
++	     "mout_mif_cmu_dispaud_decon_eclk",
++	     CLK_CON_GAT_MIF_MUX_CMU_DISPAUD_DECON_ECLK, 21, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_DISPAUD_DECON_VCLK,
++	     "gout_mif_mux_cmu_dispaud_decon_vclk",
++	     "mout_mif_cmu_dispaud_decon_vclk",
++	     CLK_CON_GAT_MIF_MUX_CMU_DISPAUD_DECON_VCLK, 21, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_FSYS_BUS, "gout_mif_mux_cmu_fsys_bus",
++	     "mout_mif_cmu_fsys_bus", CLK_CON_GAT_MIF_MUX_CMU_FSYS_BUS, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_FSYS_MMC0, "gout_mif_mux_cmu_fsys_mmc0",
++	     "mout_mif_cmu_fsys_mmc0", CLK_CON_GAT_MIF_MUX_CMU_FSYS_MMC0, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_FSYS_MMC1, "gout_mif_mux_cmu_fsys_mmc1",
++	     "mout_mif_cmu_fsys_mmc1", CLK_CON_GAT_MIF_MUX_CMU_FSYS_MMC1, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_FSYS_MMC2, "gout_mif_mux_cmu_fsys_mmc2",
++	     "mout_mif_cmu_fsys_mmc2", CLK_CON_GAT_MIF_MUX_CMU_FSYS_MMC2, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_FSYS_USB20DRD_REFCLK,
++	     "gout_mif_mux_cmu_fsys_usb20drd_refclk",
++	     "mout_mif_cmu_fsys_usb20drd_refclk",
++	     CLK_CON_GAT_MIF_MUX_CMU_FSYS_USB20DRD_REFCLK, 21, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_CAM, "gout_mif_mux_cmu_isp_cam",
++	     "mout_mif_cmu_isp_cam", CLK_CON_GAT_MIF_MUX_CMU_ISP_CAM, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_ISP, "gout_mif_mux_cmu_isp_isp",
++	     "mout_mif_cmu_isp_isp", CLK_CON_GAT_MIF_MUX_CMU_ISP_ISP, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_SENSOR0, "gout_mif_mux_cmu_isp_sensor0",
++	     "mout_mif_cmu_isp_sensor0", CLK_CON_GAT_MIF_MUX_CMU_ISP_SENSOR0,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_SENSOR1, "gout_mif_mux_cmu_isp_sensor1",
++	     "mout_mif_cmu_isp_sensor1", CLK_CON_GAT_MIF_MUX_CMU_ISP_SENSOR1,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_SENSOR2, "gout_mif_mux_cmu_isp_sensor2",
++	     "mout_mif_cmu_isp_sensor2", CLK_CON_GAT_MIF_MUX_CMU_ISP_SENSOR2,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_ISP_VRA, "gout_mif_mux_cmu_isp_vra",
++	     "mout_mif_cmu_isp_vra", CLK_CON_GAT_MIF_MUX_CMU_ISP_VRA, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_MFCMSCL_MFC, "gout_mif_mux_cmu_mfcmscl_mfc",
++	     "mout_mif_cmu_mfcmscl_mfc", CLK_CON_GAT_MIF_MUX_CMU_MFCMSCL_MFC,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_MFCMSCL_MSCL, "gout_mif_mux_cmu_mfcmscl_mscl",
++	     "mout_mif_cmu_mfcmscl_mscl", CLK_CON_GAT_MIF_MUX_CMU_MFCMSCL_MSCL,
++	     21, CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_BUS, "gout_mif_mux_cmu_peri_bus",
++	     "mout_mif_cmu_peri_bus", CLK_CON_GAT_MIF_MUX_CMU_PERI_BUS, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_SPI0, "gout_mif_mux_cmu_peri_spi0",
++	     "mout_mif_cmu_peri_spi0", CLK_CON_GAT_MIF_MUX_CMU_PERI_SPI0, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_SPI2, "gout_mif_mux_cmu_peri_spi2",
++	     "mout_mif_cmu_peri_spi2", CLK_CON_GAT_MIF_MUX_CMU_PERI_SPI2, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_SPI1, "gout_mif_mux_cmu_peri_spi1",
++	     "mout_mif_cmu_peri_spi1", CLK_CON_GAT_MIF_MUX_CMU_PERI_SPI1, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_SPI4, "gout_mif_mux_cmu_peri_spi4",
++	     "mout_mif_cmu_peri_spi4", CLK_CON_GAT_MIF_MUX_CMU_PERI_SPI4, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_SPI3, "gout_mif_mux_cmu_peri_spi3",
++	     "mout_mif_cmu_peri_spi3", CLK_CON_GAT_MIF_MUX_CMU_PERI_SPI3, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_UART1, "gout_mif_mux_cmu_peri_uart1",
++	     "mout_mif_cmu_peri_uart1", CLK_CON_GAT_MIF_MUX_CMU_PERI_UART1, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_UART2, "gout_mif_mux_cmu_peri_uart2",
++	     "mout_mif_cmu_peri_uart2", CLK_CON_GAT_MIF_MUX_CMU_PERI_UART2, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_CMU_PERI_UART0, "gout_mif_mux_cmu_peri_uart0",
++	     "mout_mif_cmu_peri_uart0", CLK_CON_GAT_MIF_MUX_CMU_PERI_UART0, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_BUSD, "gout_mif_mux_busd", "mout_mif_busd",
++	     CLK_CON_GAT_CCORE_MUX_BUSD, 21, CLK_IS_CRITICAL |
++	     CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_MEDIA_PLL, "gout_mif_mux_media_pll",
++	     "gout_mif_mux_media_pll_con", CLK_CON_GAT_CCORE_MUX_MEDIA_PLL, 21,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_GOUT_MIF_MUX_MEDIA_PLL_CON, "gout_mif_mux_media_pll_con",
++	     "fout_mif_media_pll", CLK_CON_GAT_CCORE_MUX_MEDIA_PLL_CON, 12,
++	     CLK_IS_CRITICAL | CLK_SET_RATE_PARENT, 0),
++};
++
++static const struct samsung_cmu_info ccore_cmu_info __initconst = {
++	.fixed_factor_clks	= ccore_fixed_factor_clks,
++	.nr_fixed_factor_clks	= ARRAY_SIZE(ccore_fixed_factor_clks),
++	.pll_clks		= ccore_pll_clks,
++	.nr_pll_clks		= ARRAY_SIZE(ccore_pll_clks),
++	.mux_clks		= ccore_mux_clks,
++	.nr_mux_clks		= ARRAY_SIZE(ccore_mux_clks),
++	.div_clks		= mif_div_clks,
++	.nr_div_clks		= ARRAY_SIZE(mif_div_clks),
++	.gate_clks		= ccore_gate_clks,
++	.nr_gate_clks		= ARRAY_SIZE(ccore_gate_clks),
++	.clk_regs		= ccore_clk_regs,
++	.nr_clk_regs		= ARRAY_SIZE(ccore_clk_regs),
++	.nr_clk_ids		= MIF_NR_CLK,
++};
++
+ /*
+  * Register offsets for CMU_DISPAUD (0x148d0000)
+  */
+@@ -1808,6 +2159,9 @@ static const struct of_device_id exynos7870_cmu_of_match[] = {
+ 	}, {
+ 		.compatible = "samsung,exynos7870-cmu-peri",
+ 		.data = &peri_cmu_info,
++	}, {
++		.compatible = "samsung,exynos7880-cmu-ccore",
++		.data = &ccore_cmu_info,
+ 	}, {
+ 	},
+ };
+-- 
+2.43.0
+
