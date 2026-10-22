@@ -23,6 +23,23 @@ mw.l 0x13730800 ${a5v}
 setexpr.l a5v *0x13730818 '|' 1
 mw.l 0x13730818 ${a5v}
 echo "a5y17lte: mmc1 clocks set (CCORE 0x28c/0x48c/0x88c, FSYS 0x800/0x804/0x818)"
+# K9: clocks for the Bluetooth UART (UART_BTWIFIFM, 0x13810000), also gated by
+# Samsung's kernel at boot. [P] CCORE mux 0x2a4 (bit 12 = 0: BUS_PLL/2, bit 21
+# = mux gate), div 0x4a4 (bits 3:0 = ratio - 1; 15 -> 799.5 / 16 = 49.97 MHz),
+# gate 0x8a4 bit 0; CMU_PERI 0x101f0000: 0x814 bit 11 (PCLK), 0x830 bit 0 (EXT_UCLK).
+setexpr.l a5v *0x106802a4 '&' 0xffffefff
+setexpr a5v ${a5v} '|' 0x00200000
+mw.l 0x106802a4 ${a5v}
+setexpr.l a5v *0x106804a4 '&' 0xfffffff0
+setexpr a5v ${a5v} '|' 0xf
+mw.l 0x106804a4 ${a5v}
+setexpr.l a5v *0x106808a4 '|' 1
+mw.l 0x106808a4 ${a5v}
+setexpr.l a5v *0x101f0814 '|' 0x800
+mw.l 0x101f0814 ${a5v}
+setexpr.l a5v *0x101f0830 '|' 1
+mw.l 0x101f0830 ${a5v}
+echo "a5y17lte: bt uart clocks set (CCORE 0x2a4/0x4a4/0x8a4, PERI 0x814/0x830)"
 bootm ${prevbl_initrd_start_addr}#a5y17lte
 echo "a5y17lte: bootm returned, resetting"
 reset

@@ -30,6 +30,7 @@
 		pinctrl4 = &pinctrl_fsys;
 		pinctrl5 = &pinctrl_nfc;
 		pinctrl6 = &pinctrl_top;
+		serial1 = &serial1;
 	};
 
 	cpus {
@@ -167,6 +168,26 @@
 		clock-output-names = "gout_mif_cmu_g3d_switch";
 	};
 
+	/*
+	 * K9: UART_BTWIFIFM (Bluetooth UART, Samsung serial_0 @13810000). No
+	 * CMU_PERI/CMU_CCORE driver yet, so U-Boot's boot.cmd sets the baud
+	 * clock: CCORE mux BUS_PLL/2, ratio 16 -> 799.5 / 16 = 49.96875 MHz.
+	 * The bus clock (PERI PCLK) only gates register access here.
+	 */
+	clk_peri_uart_bt_pclk: clock-peri-uart-bt-pclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+		clock-output-names = "peri_uart_bt_pclk_fixed";
+	};
+
+	clk_peri_uart_bt_baud: clock-peri-uart-bt-baud {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <49968750>;
+		clock-output-names = "peri_uart_bt_baud_fixed";
+	};
+
 	/* [D] 26 MHz crystal; [M] node name gives the "oscclk" clock name */
 	oscclk: oscclk {
 		compatible = "fixed-clock";
@@ -246,6 +267,21 @@
 			compatible = "samsung,exynos7880-pinctrl";
 			reg = <0x10630000 0x1000>;
 			interrupts = <GIC_SPI 327 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/* [D] serial_0: uart@13810000, SPI 422, fifo 256 (BT, "BTWIFIFM") */
+		serial1: serial@13810000 {
+			compatible = "samsung,exynos7870-uart",
+				     "samsung,exynos8895-uart";
+			reg = <0x13810000 0x100>;
+			interrupts = <GIC_SPI 422 IRQ_TYPE_LEVEL_HIGH>;
+
+			clock-names = "uart", "clk_uart_baud0";
+			clocks = <&clk_peri_uart_bt_pclk>, <&clk_peri_uart_bt_baud>;
+
+			samsung,uart-fifosize = <256>;
+
+			status = "disabled";
 		};
 
 		/*

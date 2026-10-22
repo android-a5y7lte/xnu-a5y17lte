@@ -111,6 +111,7 @@ a5-diag touch
 a5-diag gpu status
 # K8: SDIO clock gates for the Wi-Fi chip; if they were off the card was not
 # found at boot, so bind the host again (this also repeats the power sequence)
+a5-diag bt
 a5-diag mmc1
 if [ $? -eq 10 ]; then
 	echo 13550000.mmc > /sys/bus/platform/drivers/dwmmc_exynos/unbind 2>/dev/null
@@ -120,6 +121,9 @@ if [ $? -eq 10 ]; then
 fi
 for d in /sys/class/mmc_host/mmc1/mmc1:*; do
 	[ -e "$d" ] && echo " mmc1   : $(basename $d) type $(cat $d/type 2>/dev/null) vendor $(cat $d/vendor 2>/dev/null) device $(cat $d/device 2>/dev/null)"
+done
+for h in /sys/class/bluetooth/hci*; do
+	[ -e "$h" ] && echo " bt     : $(basename $h) present"
 done
 for i in /sys/class/net/*; do echo " net    : $(basename $i)"; done | grep -v ' lo$'
 

@@ -200,6 +200,9 @@
 		gpio = <&gpd3 3 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <4000>;
+		/* K9: Bluetooth (same chip) needs it too, and hci_qca has no
+		 * supply for QCA9377; Samsung's driver also keeps it on */
+		regulator-always-on;
 	};
 
 	wlan_pwrseq: pwrseq-wlan {
@@ -397,5 +400,55 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
 		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+};
+
+/*
+ * K9: Bluetooth half of the QCA9377 on the "BTWIFIFM" UART (Samsung serial_0,
+ * 4-wire with flow control). [D] bluetooth node: BT_EN gpd4-2 (Samsung's
+ * reset, active high), BT_WAKE gpd5-1, BT_HOST_WAKE gpa1-6. Firmware: Samsung's
+ * TLV files (TF = QCA9377 1.1) in /lib/firmware/qca/. 1.5 Mbit/s: from the
+ * 49.97 MHz clock that is +0.95 %, while 3 Mbit/s would be +4 %.
+ */
+&serial1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&bt_uart_bus>;
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,qca9377-bt";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_en>;
+		enable-gpios = <&gpd4 2 GPIO_ACTIVE_HIGH>;
+		max-speed = <1500000>;
+		firmware-name = "nvm_tlv_tf_1.1.bin", "rampatch_tlv_tf_1.1.tlv";
+	};
+};
+
+/*
+ * K9: BT_WAKE high keeps the controller awake (Samsung's LPM driver drives it
+ * high while the UART is busy); mainline hci_qca uses in-band sleep instead.
+ */
+&gpd5 {
+	bt-wake-hog {
+		gpio-hog;
+		gpios = <1 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_WAKE";
+	};
+};
+
+/* [D] uart0_bus gpb0-0..3 function 2, no pull; bt-en gpd4-2 output */
+&pinctrl_top {
+	bt_uart_bus: bt-uart-bus-pins {
+		samsung,pins = "gpb0-3", "gpb0-2", "gpb0-1", "gpb0-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+	};
+
+	bt_en: bt-en-pins {
+		samsung,pins = "gpd4-2";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 	};
 };

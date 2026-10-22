@@ -87,6 +87,14 @@
 #define FSYS_EN_BUS_REG		0x804		/* bit 9: MMC1 ACLK, bit 8: MMC0 */
 #define FSYS_EN_MMC1		0x818		/* bit 0: MMC1 SDCLKIN */
 
+/* K9: Bluetooth UART (UART_BTWIFIFM). [P] S5E7880-cmusfr.h; U-Boot sets these */
+#define CCORE_MUX_UART_BT	0x2a4
+#define CCORE_DIV_UART_BT	0x4a4
+#define CCORE_EN_UART_BT	0x8a4
+#define CMU_PERI		0x101f0000UL
+#define PERI_EN_BUS1		0x814		/* bit 11: UART_BTWIFIFM PCLK */
+#define PERI_EN_UART_BT		0x830		/* bit 0: EXT_UCLK */
+
 #define PMU_BASE		0x106b0000UL
 #define PMU_USBDEV_PHY_CONTROL	0x704
 
@@ -395,6 +403,52 @@ static int cmd_gpu(const char *step)
 		printf(" gpu    : GPU_ID %08x (Mali-T830 = 0x0830xxxx)\n", R(m, 0));
 	}
 	return 0;
+}
+
+/*
+ * K9: report the Bluetooth UART clock chain set by U-Boot's boot.cmd (baud
+ * clock 49.97 MHz); set it the same way if it is off and return 10.
+ */
+static int cmd_bt(void)
+{
+	volatile uint32_t *cc = map(CMU_CCORE), *pe = map(CMU_PERI);
+	unsigned int mux, div, en;
+	double mhz;
+	int changed = 0;
+
+	if (!cc || !pe) {
+		printf(" bt     : /dev/mem map failed\n");
+		return 1;
+	}
+	mux = R(cc, CCORE_MUX_UART_BT);
+	div = R(cc, CCORE_DIV_UART_BT);
+	en = R(cc, CCORE_EN_UART_BT);
+	mhz = ((mux & MUX_SEL_MEDIA) ? pll141xx_mhz(R(cc, CCORE_MEDIA_PLL_CON0)) :
+	       pll141xx_mhz(R(cc, CCORE_BUS_PLL_CON0))) / 2 / ((div & 0xf) + 1);
+	printf(" bt     : uart ccore mux %08x div %08x en %08x = %.3f MHz%s%s\n", mux, div, en,
+	       mhz, (mux & MUX_GATE) ? "" : " MUXGATE-OFF", (en & 1) ? "" : " GATED");
+	printf(" bt     : peri bus1 %08x uart %08x%s\n", R(pe, PERI_EN_BUS1), R(pe, PERI_EN_UART_BT),
+	       ((R(pe, PERI_EN_BUS1) >> 11) & 1) && (R(pe, PERI_EN_UART_BT) & 1) ? "" : "  GATED");
+	if ((mux & MUX_SEL_MEDIA) || !(mux & MUX_GATE)) {
+		R(cc, CCORE_MUX_UART_BT) = (mux & ~MUX_SEL_MEDIA) | MUX_GATE;
+		changed = 1;
+	}
+	if ((div & 0xf) != 0xf) {
+		R(cc, CCORE_DIV_UART_BT) = div | 0xf;	/* 799.5 / 16 */
+		changed = 1;
+	}
+	if (!(en & 1)) {
+		R(cc, CCORE_EN_UART_BT) = en | 1;
+		changed = 1;
+	}
+	if (!(R(pe, PERI_EN_BUS1) & (1u << 11)) || !(R(pe, PERI_EN_UART_BT) & 1)) {
+		R(pe, PERI_EN_BUS1) |= 1u << 11;
+		R(pe, PERI_EN_UART_BT) |= 1;
+		changed = 1;
+	}
+	if (changed)
+		printf(" bt     : was not set up by U-Boot; set now\n");
+	return changed ? 10 : 0;
 }
 
 static int cmd_usb(void)
@@ -1003,6 +1057,8 @@ int main(int argc, char **argv)
 		return cmd_lock_except(argv[2]);
 	if (!strcmp(argv[1], "gpu"))
 		return cmd_gpu(argc > 2 ? argv[2] : NULL);
+	if (!strcmp(argv[1], "bt"))
+		return cmd_bt();
 	if (!strcmp(argv[1], "mmc1"))
 		return cmd_mmc1();
 	if (!strcmp(argv[1], "touch"))
@@ -1010,6 +1066,6 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "keys"))
 		return cmd_keys();
 usage:
-	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|mmc1|gpu [status|on|clk|id]|held MS|lock-except NAME|keys\n");
+	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|touch|mmc1|bt|gpu [status|on|clk|id]|held MS|lock-except NAME|keys\n");
 	return 2;
 }
