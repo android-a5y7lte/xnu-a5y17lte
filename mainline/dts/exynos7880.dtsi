@@ -133,10 +133,11 @@
 	};
 
 	/*
-	 * K8: SDIO host (Wi-Fi). Same TEMPORARY approach as mmc0. S-Boot never
-	 * used this controller, so a5-diag mmc1 prints the real CMU_CCORE /
-	 * CMU_FSYS state and turns the gates on; the CIU value below is the
-	 * same BUS_PLL/2/2 guess as mmc0 until a5-diag has measured it.
+	 * K8: SDIO host (Wi-Fi). Same TEMPORARY approach as mmc0: fixed clocks.
+	 * S-Boot never uses this controller, so U-Boot's boot.cmd sets its
+	 * clock chain before Linux starts: CCORE mux BUS_PLL/2, ratio 4, so
+	 * CIU = 1599 / 2 / 4 = 199.875 MHz (Samsung runs it at 200 MHz);
+	 * `a5-diag mmc1` prints the real values.
 	 */
 	clk_fsys_mmc1_biu: clock-fsys-mmc1-biu {
 		compatible = "fixed-clock";
@@ -148,7 +149,7 @@
 	clk_fsys_mmc1_ciu: clock-fsys-mmc1-ciu {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
-		clock-frequency = <399750000>;
+		clock-frequency = <199875000>;
 		clock-output-names = "fsys_mmc1_ciu_fixed";
 	};
 

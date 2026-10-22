@@ -73,11 +73,19 @@
 #define FSYS_EN_BUS		0x804
 #define FSYS_EN_USB20DRD_REF	0x828
 
-/* K8: MMC1 (SDIO, Wi-Fi). [D] notes: CCORE mux/div/enable and the FSYS gate */
+/* K8: MMC1 (SDIO, Wi-Fi). [P] S5E7880-cmusfr.h / -cmu.c; U-Boot's boot.cmd sets these */
+#define CCORE_MUX_MMC0		0x288
+#define CCORE_DIV_MMC0		0x488
+#define CCORE_EN_MMC0		0x888
 #define CCORE_MUX_MMC1		0x28c
 #define CCORE_DIV_MMC1		0x48c
 #define CCORE_EN_MMC1		0x88c
-#define FSYS_EN_MMC1		0x818
+#define MUX_SEL_MEDIA		(1u << 12)	/* 0: BUS_PLL/2, 1: MEDIA_PLL/2 */
+#define MUX_GATE		(1u << 21)
+#define DIV_RATIO_MASK		0x3ffu		/* ratio - 1 */
+#define FSYS_EN_OSCCLK		0x800		/* bit 3: MMC1 OSCCLK */
+#define FSYS_EN_BUS_REG		0x804		/* bit 9: MMC1 ACLK, bit 8: MMC0 */
+#define FSYS_EN_MMC1		0x818		/* bit 0: MMC1 SDCLKIN */
 
 #define PMU_BASE		0x106b0000UL
 #define PMU_USBDEV_PHY_CONTROL	0x704
@@ -240,41 +248,65 @@ static int cmd_system(void)
 }
 
 /*
- * K8: show the MMC1 (SDIO) clock chain and switch the gates on, as cmd_usb
- * does for USB: S-Boot never used this controller. Returns 10 if it turned
- * something on (the caller then re-binds the mmc1 driver), 1 on error.
+ * K8: report the MMC1 (SDIO) clock chain that U-Boot's boot.cmd set up, with
+ * MMC0 (the eMMC, set by S-Boot) for comparison. If anything is still off
+ * (an older U-Boot script), set it the same way and return 10 so the caller
+ * re-binds the mmc1 driver; 1 on error.
  */
+static double mmc_ciu_mhz(volatile uint32_t *cc, unsigned int mux, unsigned int div)
+{
+	double parent = (mux & MUX_SEL_MEDIA) ? pll141xx_mhz(R(cc, CCORE_MEDIA_PLL_CON0)) / 2 :
+				pll141xx_mhz(R(cc, CCORE_BUS_PLL_CON0)) / 2;
+
+	return parent / ((div & DIV_RATIO_MASK) + 1);
+}
+
 static int cmd_mmc1(void)
 {
 	volatile uint32_t *cc = map(CMU_CCORE), *fs = map(CMU_FSYS);
-	unsigned int mux, div, en, fen;
+	unsigned int mux, div, en;
 	int changed = 0;
-	double parent;
 
 	if (!cc || !fs) {
 		printf(" mmc1   : /dev/mem map failed\n");
 		return 1;
 	}
+	for (int i = 0; i < 2; i++) {
+		mux = R(cc, i ? CCORE_MUX_MMC1 : CCORE_MUX_MMC0);
+		div = R(cc, i ? CCORE_DIV_MMC1 : CCORE_DIV_MMC0);
+		en = R(cc, i ? CCORE_EN_MMC1 : CCORE_EN_MMC0);
+		printf(" mmc%d   : ccore mux %08x div %08x en %08x = CIU %.3f MHz%s%s\n", i,
+		       mux, div, en, mmc_ciu_mhz(cc, mux, div),
+		       (mux & MUX_GATE) ? "" : " MUXGATE-OFF", (en & 1) ? "" : " GATED");
+	}
+	printf(" mmc1   : fsys osc %08x bus %08x sdclk %08x%s\n", R(fs, FSYS_EN_OSCCLK),
+	       R(fs, FSYS_EN_BUS_REG), R(fs, FSYS_EN_MMC1),
+	       ((R(fs, FSYS_EN_BUS_REG) >> 9) & 1) && (R(fs, FSYS_EN_MMC1) & 1) ? "" : "  GATED");
+
 	mux = R(cc, CCORE_MUX_MMC1);
-	div = R(cc, CCORE_DIV_MMC1);
-	en = R(cc, CCORE_EN_MMC1);
-	fen = R(fs, FSYS_EN_MMC1);
-	parent = ((mux >> 12) & 1) ? pll141xx_mhz(R(cc, CCORE_MEDIA_PLL_CON0)) / 2 :
-		 pll141xx_mhz(R(cc, CCORE_BUS_PLL_CON0)) / 2;
-	printf(" mmc1   : ccore mux %08x div %08x en %08x = %.3f MHz%s\n", mux, div, en,
-	       parent / ((div & 0xf) + 1), (en & 1) ? "" : "  GATED");
-	printf(" mmc1   : fsys gate %08x%s\n", fen, (fen & 1) ? "" : "  GATED");
-	if (!(en & 1)) {
-		R(cc, CCORE_EN_MMC1) = en | 1;
+	if ((mux & MUX_SEL_MEDIA) || !(mux & MUX_GATE)) {
+		R(cc, CCORE_MUX_MMC1) = (mux & ~MUX_SEL_MEDIA) | MUX_GATE;
 		changed = 1;
 	}
-	if (!(fen & 1)) {
-		R(fs, FSYS_EN_MMC1) = fen | 1;
+	div = R(cc, CCORE_DIV_MMC1);
+	if ((div & DIV_RATIO_MASK) != 3) {
+		R(cc, CCORE_DIV_MMC1) = (div & ~DIV_RATIO_MASK) | 3;	/* 1599/2/4 */
+		changed = 1;
+	}
+	if (!(R(cc, CCORE_EN_MMC1) & 1)) {
+		R(cc, CCORE_EN_MMC1) |= 1;
+		changed = 1;
+	}
+	if (!(R(fs, FSYS_EN_BUS_REG) & (1u << 9)) || !(R(fs, FSYS_EN_OSCCLK) & (1u << 3)) ||
+	    !(R(fs, FSYS_EN_MMC1) & 1)) {
+		R(fs, FSYS_EN_BUS_REG) |= 1u << 9;
+		R(fs, FSYS_EN_OSCCLK) |= 1u << 3;
+		R(fs, FSYS_EN_MMC1) |= 1;
 		changed = 1;
 	}
 	if (changed)
-		printf(" mmc1   : gates turned ON (ccore %08x, fsys %08x)\n",
-		       R(cc, CCORE_EN_MMC1), R(fs, FSYS_EN_MMC1));
+		printf(" mmc1   : was not set up by U-Boot; set now: CIU %.3f MHz\n",
+		       mmc_ciu_mhz(cc, R(cc, CCORE_MUX_MMC1), R(cc, CCORE_DIV_MMC1)));
 	return changed ? 10 : 0;
 }
 
