@@ -1485,3 +1485,74 @@ and clk-exynos7870.o compile; a5-diag builds with -Wall -Wextra -Werror.
 (3) `a5-diag gpu`, `a5-diag gpu clk`, `a5-diag gpu id`, one at a time, pasting each
 output. Success = GPU_ID 0x0830xxxx. Record the status of the domain at boot
 (on or off): it decides whether the CMU driver can be enabled safely.
+
+## K8b. Wi-Fi completed in code: clocks from U-Boot, firmware plan, `a5-wifi.sh` (built 2026-10-22, NOT yet tested on the phone; branch android-k8b, on top of android-k5)
+
+**Image.** `out/a5y17lte-mainline-k8b-boot.img`, 16,379,920 B, sha256
+`a313039ebb751b552230d58be8630f1644af4b6df696bdee8d53dd258823ddc8`, built at
+commit 8938850 (`MILESTONE=k8b ./build-mainline.sh`, built in the cloud
+session). Includes K1 (touch), K8a/K8b (Wi-Fi), K5a (GPU checks). eMMC stays
+read-only in rescue as before; nothing was written to the phone.
+
+**Correction to K8a (found in Samsung pwrcal, `S5E7880-cmusfr.h`, `-cmu.c`,
+`-vclk.c`).** The MMC1 clock chain is longer than the notes said, and Samsung's
+kernel *gates it at boot* (`vclk_disable(gate_fsys_mmc1 / sclk_mmc1)`), so a
+dw_mmc probe of a gated host could hang the bus before userspace. K8a's
+userspace switch-on came too late. The full chain:
+- CMU_CCORE 0x10680000: mux 0x28c (bit 12: 0 = BUS_PLL/2, 1 = MEDIA_PLL/2;
+  bit 21 = mux gate), divider 0x48c (bits 9:0 = ratio - 1, 10 bits, not 4),
+  gate 0x88c bit 0.
+- CMU_FSYS 0x13730000: 0x804 bit 9 (MMC1 ACLK; bit 8 is MMC0), 0x800 bit 3
+  (MMC1 OSCCLK), 0x818 bit 0 (SDCLKIN).
+
+**Fix.** U-Boot's `mainline/boot.cmd` sets the chain before `bootm`, with
+read-modify-write (`setexpr.l v *ADDR '&'/'|' MASK`, `mw.l`): BUS_PLL/2,
+ratio 4 = 1599 / 2 / 4 = 199.875 MHz (Samsung runs this clock at 200 MHz), all
+gates on. The DT's fixed CIU clock for mmc1 is now 199875000. `a5-diag mmc1`
+prints the chain for MMC0 and MMC1 and sets it itself only if U-Boot didn't.
+
+**Emulator check (Unicorn, `tools/emulate_uboot.py` with register values
+injected).** U-Boot runs the script without errors, prints
+`a5y17lte: mmc1 clocks set (...)` and reaches the Linux entry. Writes with
+simulated old values:
+0x1068028c 0x00001003 -> 0x00200003 (MEDIA cleared, gate set, rest kept);
+0x1068048c 0x1 -> 0x3; 0x1068088c 0 -> 1; 0x13730804 0x1ff -> 0x3ff;
+0x13730800 0x7 -> 0xf; 0x13730818 0 -> 1. Exactly the intended bits.
+
+**Firmware.**
+- ath10k needs Qualcomm's `ath10k/QCA9377/hw1.0/firmware-sdio-5.bin`
+  (linux-firmware; Alpine/pmOS package `linux-firmware-ath10k`). Samsung's
+  `qwlan30.bin` is qcacld's format and not usable by ath10k.
+- Board data (the radio calibration; this firmware ignores the chip's OTP):
+  linux-firmware's `board-2.bin` has no SDIO entry (others report
+  `failed to fetch board data for bus=sdio,vendor=0271,device=0701`), so ath10k
+  falls back to `board.bin`. We use Samsung's own `bdwlan30.bin` (8124 B, sha256
+  `ee4118d7…ad655`, TheMuppets proprietary_vendor_samsung lineage-17.1
+  332fcf06, universal7880-common), installed as
+  `/lib/firmware/updates/ath10k/QCA9377/hw1.0/board.bin` (searched before
+  /lib/firmware, so no clash with the package). Samsung's qcacld uses
+  `bdwlan30_OLD.bin` for board revision <= 3 (`CONFIG_WLAN_QCA9377_DUAL_BDF=3`),
+  else `bdwlan30.bin`; a retail phone should be the latter. The revision can be
+  read in TWRP: `adb shell cat /proc/cmdline` (look for a revision field).
+- These files are not in git (proprietary); `a5-wifi.sh setup` downloads and
+  checks them on the phone.
+
+**`mainline/tools/a5-wifi.sh`** (for Nura, copy with `scp -O`): `check` (SDIO
+card, driver, firmware files, wlan0, ath10k dmesg), `setup` (apk add
+linux-firmware-ath10k wireless-regdb iw wpa_supplicant curl, Samsung board
+data with checksum, re-probe), `probe`, `scan`, `connect SSID [PASS]`
+(NetworkManager, else wpa_supplicant + udhcpc).
+
+**Test (PC session).**
+1. Flash `out/a5y17lte-mainline-k8b-boot.img` (TWRP Install Image -> Boot).
+   Hold Volume Down for rescue. `a5-diag mmc1`: MMC1 CIU 199.875 MHz, no
+   GATED, no "was not set up by U-Boot". `dmesg | grep -i mmc1`: success is
+   `mmc1: new ... SDIO card`, and `/sys/bus/sdio/devices/*/vendor` = 0x0271.
+   ath10k failing on missing firmware here is expected.
+   Also run the K1 and K5a checks (sections above).
+2. Boot Nura, set up the USB internet (EVIDENCE 26), `a5-wifi.sh setup`, then
+   `a5-wifi.sh scan` and `a5-wifi.sh connect "<ssid>" "<password>"`.
+3. Known ath10k-SDIO failure modes to watch for: `Timeout waiting for hardware
+   interrupt` / `Could not init hif: -110` (SDIO interrupt not working: try
+   without `cap-sdio-irq`), board data errors (try `bdwlan30_OLD.bin`).
+   Rollback: flash the M5e image.
