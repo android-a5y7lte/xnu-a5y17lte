@@ -211,6 +211,32 @@
 		post-power-on-delay-ms = <10>;
 	};
 
+	/*
+	 * K6: S2MU004 fuel gauge at 0x3b on Samsung's i2c@13830000 (I2C4),
+	 * pins gpc4-0 (SDA) / gpc4-1 (SCL), interrupt gpa0-3 [D]
+	 * exynos7880-a5y17lte-common-battery.dtsi. Same registers and scaling
+	 * as the S2MU005 fuel gauge (mainline s2mu005-battery, read-only).
+	 * GPIO bus until CMU_PERI's I2C clocks are wired.
+	 */
+	i2c_fg: i2c-gpio-fuel-gauge {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpc4 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpc4 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		fuel-gauge@3b {
+			compatible = "samsung,s2mu004-fuel-gauge",
+				     "samsung,s2mu005-fuel-gauge";
+			reg = <0x3b>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <3 IRQ_TYPE_EDGE_BOTH>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&fuel_irq>;
+		};
+	};
+
 	/* [D] memory@40000000 0x3E400000 and memory@80000000 0x80000000 (3 GB) */
 	memory@40000000 {
 		device_type = "memory";
@@ -312,6 +338,14 @@
 	/* [D] PMIC interrupt gpa0-2, touch attention gpa0-5 (function 0xf) */
 	pmic_irq: pmic-irq-pins {
 		samsung,pins = "gpa0-2";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	/* [D] fuel-irq gpa0-3, input */
+	fuel_irq: fuel-irq-pins {
+		samsung,pins = "gpa0-3";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;

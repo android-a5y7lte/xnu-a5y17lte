@@ -122,6 +122,10 @@ fi
 for d in /sys/class/mmc_host/mmc1/mmc1:*; do
 	[ -e "$d" ] && echo " mmc1   : $(basename $d) type $(cat $d/type 2>/dev/null) vendor $(cat $d/vendor 2>/dev/null) device $(cat $d/device 2>/dev/null)"
 done
+for b in /sys/class/power_supply/*; do
+	[ -e "$b/type" ] || continue
+	echo " power  : $(basename $b) $(cat $b/type) status $(cat $b/status 2>/dev/null) $(cat $b/capacity 2>/dev/null)% $(cat $b/voltage_now 2>/dev/null) uV $(cat $b/current_now 2>/dev/null) uA"
+done
 for h in /sys/class/bluetooth/hci*; do
 	[ -e "$h" ] && echo " bt     : $(basename $h) present"
 done

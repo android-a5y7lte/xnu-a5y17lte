@@ -1,0 +1,38 @@
+From eb15a5aaada1e90a8d0f2a37a1fc465163ebb8c0 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Fri, 23 Oct 2026 01:03:41 +0300
+Subject: [PATCH] dt-bindings: power: supply: samsung,s2mu005-fuel-gauge: add
+ S2MU004
+
+The fuel gauge of the S2MU004 (used with the Exynos7880 in the Galaxy
+A5 2017) has the same registers and scaling as the S2MU005 one: VBAT
+(0x04, 1 V = 1 << 13), CURCC (0x06), RSOC (0x08), MONOUT/MONOUTSEL
+(0x0a/0x0c) for the averages, per the vendor kernel's
+s2mu004_fuelgauge.c. Allow it with the S2MU005 compatible as fallback.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ .../bindings/power/supply/samsung,s2mu005-fuel-gauge.yaml  | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/power/supply/samsung,s2mu005-fuel-gauge.yaml b/Documentation/devicetree/bindings/power/supply/samsung,s2mu005-fuel-gauge.yaml
+index 05e420316..f83343283 100644
+--- a/Documentation/devicetree/bindings/power/supply/samsung,s2mu005-fuel-gauge.yaml
++++ b/Documentation/devicetree/bindings/power/supply/samsung,s2mu005-fuel-gauge.yaml
+@@ -14,8 +14,11 @@ allOf:
+ 
+ properties:
+   compatible:
+-    enum:
+-      - samsung,s2mu005-fuel-gauge
++    oneOf:
++      - const: samsung,s2mu005-fuel-gauge
++      - items:
++          - const: samsung,s2mu004-fuel-gauge
++          - const: samsung,s2mu005-fuel-gauge
+ 
+   reg:
+     maxItems: 1
+-- 
+2.43.0
+
