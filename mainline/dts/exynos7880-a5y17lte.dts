@@ -151,6 +151,20 @@
 					regulator-boot-on;
 				};
 
+				/*
+				 * K5b: [D] BUCK3 "vdd_g3d" (Mali), 0.5-1.3 V,
+				 * boot-on + always-on as in Samsung's DT. No OPP
+				 * table yet, so nothing changes its voltage.
+				 */
+				vdd_g3d: buck3 {
+					regulator-name = "vdd_g3d";
+					regulator-min-microvolt = <500000>;
+					regulator-max-microvolt = <1300000>;
+					regulator-ramp-delay = <12000>;
+					regulator-always-on;
+					regulator-boot-on;
+				};
+
 				vtouch_3v3: ldo35 {
 					regulator-name = "vtouch_3.3v";
 					regulator-min-microvolt = <3300000>;
@@ -451,4 +465,22 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 	};
+};
+
+/*
+ * K5b (staged: build only after the K5a checks passed on the phone). CMU_G3D
+ * holds the pd_g3d domain: the platform bus powers the domain on before the
+ * CMU probes, and with no runtime PM in the CMU driver it stays on. The GPU
+ * node itself has no power-domains here, so Panfrost's runtime suspend can't
+ * switch the domain off and lose the CMU_G3D settings (no CMU save/restore
+ * yet). No OPP table: Panfrost runs at whatever rate S-Boot left, no devfreq.
+ */
+&cmu_g3d {
+	status = "okay";
+};
+
+&gpu {
+	/delete-property/ power-domains;
+	mali-supply = <&vdd_g3d>;
+	status = "okay";
 };

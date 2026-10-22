@@ -1621,3 +1621,43 @@ writes unchanged from K8b; reaches the Linux entry.
    (baud, flow-control pins, or BT_EN); firmware download errors = wrong file
    or baud patching; then try `max-speed = <115200>` to isolate the baud.
    Rollback: flash the M5e image.
+
+## K5b. Panfrost staged (2026-10-23): code only, NO image; build after K5a passes (branch android-k5b, on top of android-k9)
+
+**Do not build or flash K5b until the K5a checks in the K9 image passed**
+(`a5-diag gpu status` / `on` / plain / `clk` / `id`, GPU_ID 0x0830xxxx). Then:
+`MILESTONE=k5b ./build-mainline.sh` on this branch.
+
+**Changes.**
+- PMIC (on the K1 bus, 0x66): `vdd_g3d` = **BUCK3** ([D] Samsung
+  `buck3_reg: BUCK3 { regulator-name = "vdd_g3d"; ... }`, 0.5-1.3 V, boot-on,
+  always-on). (MrLu1z's v1.2 used BUCK2 on the MUIC bus at 0x3d: wrong rail and
+  wrong chip; his kernel also lacked the CMU/pd/PMIC drivers and CONFIG_PM, so
+  Panfrost could never probe there.)
+- `&cmu_g3d` enabled (mainline `samsung,exynos7870-cmu-g3d`, registers match,
+  see K5a) with `power-domains = <&pd_g3d>` (mainline `samsung,exynos4210-pd`):
+  the platform bus powers the domain on before the CMU probes, and the CMU
+  driver has no runtime PM, so the domain stays on.
+- `&gpu` enabled with `mali-supply = <&vdd_g3d>` and **without**
+  `power-domains`, on purpose: otherwise Panfrost's runtime suspend could
+  power the domain off and lose CMU_G3D's settings (no save/restore yet).
+- No OPP table: no devfreq, the GPU runs at whatever rate the CMU has; the
+  "switch" input is still the 399.75 MHz placeholder.
+- Config: `CONFIG_DRM_PANFROST=y` (selects DRM_SCHED, IOMMU_IO_PGTABLE_LPAE,
+  PM_DEVFREQ; no Exynos IOMMU).
+- init: lists `/sys/class/drm/card*`/`renderD*` with their drivers and the last
+  Panfrost dmesg lines.
+
+**Not done (later):** Samsung's G3D power-domain pre/post steps (PMU
+SYS_PWR_REG bits, DRCG enables, `S5E7880-pmu.c` g3d_prev/g3d_post), OPP table
+and DVFS, the real CMU_MIF/CCORE "switch" clock.
+
+**Checked.** Config symbols stick (PM, EXYNOS_PM_DOMAINS, REGULATOR_S2MPS11,
+DRM_PANFROST, DRM_SCHED, IOMMU_IO_PGTABLE_LPAE, PM_DEVFREQ); DTB W=1 clean
+(gpu: okay, mali-supply, no power-domains; cmu_g3d: okay, power-domains);
+drivers/gpu/drm/panfrost compiles.
+
+**Expected on success.** dmesg `panfrost 11400000.gpu: mali-t830 id 0x830
+major ...`, `/dev/dri/renderD128`; then in Nura `apk add mesa-dri-gallium
+kmscube` and `kmscube -D /dev/dri/card0` (simpledrm display) with Panfrost
+rendering through renderD128.
