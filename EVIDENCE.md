@@ -1230,7 +1230,7 @@ SYSTEM so far; no package was installed.
 lost at PC reboot. Making them permanent belongs in the device package (an
 OpenRC script), through a rootfs rebuild.
 
-## 27. The `reboot` hang: diagnosis so far (2026-10-20)
+## 27. The `reboot` hang: diagnosis so far, and screen banners (2026-10-20)
 
 **Symptom.** `reboot` in Nura: the gadget tears down cleanly, the screen stays
 on the Samsung logo, forced power-off (Volume Down + Power) needed. Seen three
@@ -1251,7 +1251,7 @@ and a normal boot, identical. INFORM2 already holds Samsung's value, INFORM3 = 0
 is also the state of a boot that works, so the INFORM theory is unlikely but not
 fully excluded (0x12345670 vs 0 is untested).
 
-**USB.** `18d1:4ee2 SAMSUNG_Android` is TWRP (EVIDENCE 18 and 18g), not a
+**USB.** `18d1:4ee2 SAMSUNG_Android` is TWRP (see EVIDENCE 6 and 18), not a
 download mode. A first run suggested a slow boot (TWRP at +180 s, then Nura);
 that was the forced recovery trip. Hands-off test, `reboot` at 01:20:08 and
 6+ minutes untouched: only the gadget teardown, then no USB device at all until
@@ -1263,6 +1263,98 @@ the last run's description was not given).
 Volume Down hold missed. (2) If rescue works, `mount -o remount,ro /` + `reboot
 -f` in Nura. (3) If rescue hangs too, write INFORM3 = 0x12345670 (PMU only)
 before the reboot.
+
+**Banners.** First version (13-row banners at top and bottom, big text
+`KERNEL ALIVE`/`RESCUE MODE`, image `b6732974…`): on the phone the green banner
+was bigger than wanted, and when Nura's boot output took over the bottom copy
+scrolled away (init reset the scroll region before `switch_root`), leaving the
+lower part of the login screen blank (old photo
+`evidence/hw-mainline-m5e-nura-rw-login-2026-10-19.jpg`: the boot text and
+login prompt end about two thirds down the 60-row console).
+
+Second version: one compact banner pinned at the bottom, 7 rows: Tux (11
+columns) beside one block-letter word, green `ALIVE` or red `RESCUE`, with a
+blank row above. The log scrolls in a scroll region above it (rows 1-52) and
+the region is **never reset**, not even at `switch_root`, so the banner should
+stay through OpenRC and the login prompt. The top copy and the words `KERNEL`
+and `MODE` are gone for compactness. In rescue the banner is repainted in red
+without clearing the log. Checked with busybox under qemu: `sh -n` and a crude
+screen emulator (rows 54-60, no overflow past 67 columns). **Not verified:**
+that nothing in Nura resets the region or clears the screen (busybox `getty`,
+OpenRC's consolefont service); a full-screen program on the console that resets
+the region can overwrite the banner. If it disappears, the fallback is a
+repaint loop started from init (chrooted into the new root, since the
+initramfs root is gone after `switch_root`) or an OpenRC service in the
+device package.
+New image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `661b68aa3582c18193db592822547adadf12901eeae06bcf3cd4a3c0013a732c`
+(14,626,832 B; replaces `b6732974…`, `a4eb48ec…` and `e38f49cd…`, all in git
+history).
+
+Third version (Jimmy's mockup): the banner is a pixel-art Tux 13 rows tall
+(2 console cells per pixel: rounded head, two eye holes, yellow beak, hollow
+belly, flippers, yellow feet) with the label to its right in block letters,
+two stacked words vertically centred beside it: `KERNEL` / `ALIVE` (green) or
+`RESCUE` / `MODE` (red; the penguin is red too in rescue). Two copies: one
+drawn at rows 1-13 right after the screen is cleared at init start (it scrolls
+away with the log), one pinned at rows 48-60 with the log in a scroll region
+above it (rows 1-46, never reset, so it should stay through Nura's boot as in
+the second version, still unverified on the phone). Deviations from the
+mockup: the belly is a black hole, not white, and the beak and feet are the
+console's yellow-brown, because "the whole penguin green" was also asked (the
+console has no orange; the belly could be white, at the cost of a green-only
+penguin). Checked with busybox under qemu: `sh -n`, a screen emulator
+rendering both copies (widest column 64 of 67; drawing takes about 0.8 s under
+qemu, so far less on the phone). Image `out/a5y17lte-mainline-m5e-boot.img`,
+sha256 `2cd79c35dc22e0e48ad3049b1b2e2c0831ebdce26aa768ffd92d839adbeca4eb` (14,626,832 B), replacing `661b68aa…`.
+
+Phone result for the third version: penguin, colours and the `KERNEL ALIVE`
+text look right, but each copy (13 rows) takes too much of the screen. A
+garbled a5-diag info block in one photo was a frame caught mid-update (Jimmy),
+not a bug.
+
+Fourth version: each copy is 7 rows (was 13): Tux 12 pixels wide at 1 console
+cell per pixel (head, two eye holes, yellow beak, flippers, hollow belly,
+yellow feet) and the label on one line beside it in 3x5 block letters (5 rows,
+vertically centred), `KERNEL ALIVE` green or `RESCUE MODE` red, about 62
+columns wide in all. Same layout otherwise: a copy at rows 1-7 right after the
+clear, one pinned at rows 54-60, the log in a scroll region (rows 1-52) that
+is never reset. Checked with busybox under qemu: `sh -n` and the screen
+emulator (both copies render, letters legible). Image
+`out/a5y17lte-mainline-m5e-boot.img`, sha256 `2156feb8149ad1b6512cb7319f821c95144521947a0911243cc0bb87b3b0a9c8 (built from commit 2980aa8; the build time stamp comes from the HEAD commit, so rebuilding at a later commit gives other bytes)` (14,626,832 B), replacing
+`2cd79c35…`.
+
+Fifth version (Jimmy: same colours, about half the size again, and the label
+`KERNEL ALIVE` renamed `KERNEL MODE`): each copy is 4 rows (was 7): a Tux 10
+pixels wide at 1 console cell per pixel (head with two eye holes, yellow beak,
+flippers with a hollow belly, yellow feet) and the label on one line beside
+it, at the face row, in plain bright white text on a green (`KERNEL MODE`) or
+red (`RESCUE MODE`) bar, about 36 columns wide in all. The 3x5 block letters
+are gone (5 rows tall, too big for 4 rows), so the label is now ordinary
+console text, not block letters. Layout otherwise unchanged: a copy at rows
+1-4 right after the clear, one pinned at rows 57-60, the log in a scroll
+region (rows 1-56) that is never reset. Checked with busybox under qemu: `sh
+-n` and the screen emulator (both copies render). Image
+`out/a5y17lte-mainline-m5e-boot.img`, sha256 `88aa19ce34967cd6b200f55e5a5eaf524d1750e4e7db5b46f4dd770f904593c8` (14626832 B), built at commit
+869f03c (the build time stamp comes from the HEAD commit), replacing `2156feb8…`.
+
+Sixth version (Jimmy: penguin 6 rows tall instead of 4, the rest the same): the
+Tux is 10 pixels wide and 6 rows tall (rounded head, two eye holes, yellow
+beak, flippers around a hollow belly, yellow feet); the banner is therefore 6
+rows: copies at rows 1-6 and 55-60, scroll region rows 1-53. The label stays
+on one line beside it, now at the beak row (row 3 of 6, was row 2 of 4), same
+text and colours. Checked with busybox under qemu: `sh -n` and the screen
+emulator. Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `996ed3645d518f97b9b89f78443083e3b40e582a1bad3cb0e906555836f494c9` (14626832 B),
+built at commit a970597, replacing `88aa19ce…`.
+
+Seventh version (Jimmy: penguin 10 rows tall instead of 6, the rest the same):
+the Tux is 12 pixels wide at 2 console cells per pixel (24 columns, so the
+pixels stay square) and 10 rows tall; the banner is therefore 10 rows: copies
+at rows 1-10 and 51-60, scroll region rows 1-49. Shape: head, two eye holes,
+yellow beak, flippers around a hollow belly, yellow feet. The label stays on
+one line beside it at the beak row (row 4 of 10), same text and colours.
+Checked with busybox under qemu: `sh -n` and the screen emulator (widest
+column 53 of 67). Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `4b6fe1b0fef7061a852aca6d692d62f12ad0a3684008cb2ad04bc7197fa55116`
+(14626832 B), built at commit 55ed892, replacing `996ed364…`.
 
 ## K1. Touchscreen: built 2026-10-20, NOT yet tested on the phone (branch android-k1)
 
