@@ -1566,3 +1566,58 @@ data with checksum, re-probe), `probe`, `scan`, `connect SSID [PASS]`
    interrupt` / `Could not init hif: -110` (SDIO interrupt not working: try
    without `cap-sdio-irq`), board data errors (try `bdwlan30_OLD.bin`).
    Rollback: flash the M5e image.
+
+## K9. Bluetooth: QCA9377 BT on the Samsung UART (built 2026-10-23, NOT yet tested on the phone; branch android-k9, on top of android-k8b)
+
+**Image.** `out/a5y17lte-mainline-k9-boot.img`, 17,317,904 B, sha256
+`29bfcae0ad16bccc1620b56f5a0049f6f358d76e8e574f2f8a3e590bd7e88e37`, built at commit a2819e8 (`MILESTONE=k9`). Contains everything
+in K8b (touch, Wi-Fi, GPU checks) plus Bluetooth. **Flash this one instead of K8b**:
+it tests both. eMMC stays read-only in rescue; nothing was written to the phone.
+
+**Hardware (Samsung universal7880 sources).**
+- UART: Samsung `serial_0` = `uart@13810000`, SPI 422, fifo 256, pins gpb0-0..3
+  (TX/RX/CTS/RTS, function 2, TOP controller). In pwrcal it is
+  `UART_BTWIFIFM` (the debug UART is 0x13820000 on gpa1-0/1). Mainline's
+  Exynos7870 DT names the same block `serial1` and uses it for Bluetooth too.
+- Control: BT_EN gpd4-2 (Samsung's `bluetooth-power.c` pulses it low/high as a
+  reset, active high), BT_WAKE gpd5-1 (high = awake, Samsung's LPM),
+  BT_HOST_WAKE gpa1-6. Same DCDC_EN supply (gpd3-3) as Wi-Fi.
+- Firmware: Samsung's TLV files `rampatch_tlv_tf_1.1.tlv` (68,900 B, TLV type 1,
+  length 68,896) and `nvm_tlv_tf_1.1.bin` (2,001 B, TLV type 2, length 1,997),
+  the format btqca parses. sha256 `143a3a86…a17b` and `8869a8e4…b665`.
+- Clocks, gated by Samsung's kernel at boot like mmc1: CCORE mux 0x2a4 (bit 12
+  BUS/MEDIA, bit 21 mux gate), div 0x4a4 (4 bits), gate 0x8a4 bit 0; CMU_PERI
+  (0x101f0000) 0x814 bit 11 (PCLK), 0x830 bit 0 (EXT_UCLK).
+
+**Changes.**
+- `boot.cmd`: U-Boot sets the UART clock chain (BUS_PLL/2 / 16 = 49.96875 MHz).
+- DT: `serial1` (`samsung,exynos7870-uart`/`exynos8895-uart`, fixed clocks),
+  `bluetooth` child `qcom,qca9377-bt` with `enable-gpios` gpd4-2,
+  `max-speed = <1500000>` (the UART clock gives +0.95 % at 1.5 Mbit/s but
+  +4 % at 3 Mbit/s), `firmware-name` = the two Samsung files. BT_WAKE held
+  high by a gpio-hog. `wlan_dcdc` is now `regulator-always-on` (hci_qca has
+  no supply for QCA9377; without it BT would die whenever Wi-Fi powers off).
+- Config: SERIAL_SAMSUNG (no serial console), SERIAL_DEV_BUS + TTYPORT, BT,
+  BR/EDR, LE, RFCOMM, HIDP + HID_GENERIC, HCIUART + SERDEV + QCA.
+- `a5-diag bt` (runs at boot): prints the UART clock chain, sets it if U-Boot
+  didn't; init lists `hci*` devices.
+- `mainline/tools/a5-bt.sh` (Nura): `check`, `setup` (apk add bluez
+  bluez-btmgmt, Samsung firmware with checksums into /lib/firmware/qca), `on`,
+  `scan`. Firmware loads when the controller is powered on, no re-probe.
+
+**Checked.** Config symbols stick; DTB W=1 clean; System.map has
+qca_serdev_probe, s3c24xx_serial_probe, ath10k_sdio_probe, zinitix_ts_probe,
+exynos_pd_probe, sec_pmic_i2c_probe. Emulator (U-Boot boot script with
+injected values): 0x106802a4 0x1000 -> 0x200000, 0x106804a4 0x3 -> 0xf,
+0x106808a4 0 -> 1, 0x101f0814 0x1400 -> 0x1c00, 0x101f0830 0 -> 1; the Wi-Fi
+writes unchanged from K8b; reaches the Linux entry.
+
+**Test (PC session).**
+1. Flash `out/a5y17lte-mainline-k9-boot.img`, rescue (Volume Down): `a5-diag bt`
+   (49.969 MHz, no GATED), `ls /sys/class/bluetooth` (hci0),
+   `dmesg | grep -i 'qca\|hci\|13810000'`. Then the K8b, K1 and K5a checks.
+2. Nura with USB internet: `a5-bt.sh setup`, then `a5-bt.sh scan`.
+3. Expected trouble: "QCA controller version" read failing = UART not talking
+   (baud, flow-control pins, or BT_EN); firmware download errors = wrong file
+   or baud patching; then try `max-speed = <115200>` to isolate the baud.
+   Rollback: flash the M5e image.
