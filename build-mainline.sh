@@ -43,7 +43,11 @@ export PATH="$LC:$PATH"
 echo "== Linux: device tree + config + Image"
 # Kernel driver changes live as patches (git am onto v7.2, branch a5y17lte);
 # device trees are copied from mainline/dts so they stay easy to read.
-if [ "$(git -C "$LINUX" rev-parse --abbrev-ref HEAD)" != a5y17lte ]; then
+# Re-create the branch when it isn't checked out or holds a different number of
+# patches than mainline/patches (e.g. a branch that added 0008/0009).
+NP=$(ls "$ML"/patches/*.patch 2>/dev/null | wc -l)
+if [ "$(git -C "$LINUX" rev-parse --abbrev-ref HEAD)" != a5y17lte ] ||
+   [ "$(git -C "$LINUX" rev-list --count v7.2..HEAD 2>/dev/null)" != "$NP" ]; then
 	git -C "$LINUX" checkout -q -B a5y17lte v7.2 2>/dev/null || git -C "$LINUX" checkout -q -B a5y17lte
 	for p in "$ML"/patches/*.patch; do
 		[ -e "$p" ] && git -C "$LINUX" -c user.name=a5y17lte -c user.email=a5y17lte@localhost am -q "$p"
