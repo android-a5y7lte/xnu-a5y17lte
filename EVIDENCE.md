@@ -1669,3 +1669,20 @@ doesn't model). `clk_ignore_unused` stays on the command line.
 read 1599 MHz, `gout_mif_cmu_fsys_mmc0` about 400 MHz (S-Boot's setting) or
 what dw_mmc asked for, `gout_mif_cmu_peri_uart1` about 50 MHz. eMMC (lsblk),
 USB networking, `a5-diag mmc1`, `a5-diag bt` as in K9.
+
+## K6a. Battery fuel gauge (built 2026-10-23, NOT yet tested; branch android-k6, on top of android-k2)
+
+**Image.** `out/a5y17lte-mainline-k6-boot.img`, 17,317,904 B, sha256
+`5f389acd334ae009d0d89f8e9353fe7c8b461db38bbf6e2fd471ed160165e127`,
+built at commit 4576fcd (`MILESTONE=k6`): K2 + the fuel gauge. Flash after K2.
+
+S2MU004 fuel gauge at 0x3b on a GPIO I2C bus (gpc4-0 SDA / gpc4-1 SCL,
+Samsung's I2C4), interrupt gpa0-3 (both edges), driven by mainline
+`s2mu005-battery` (registers and scaling identical, see
+ANDROID-K6-BATTERY-NOTES.md); kernel patch 0010 adds the
+`samsung,s2mu004-fuel-gauge` compatible to the binding (S2MU005 fallback).
+Config: POWER_SUPPLY, BATTERY_S2MU005. init prints every power_supply
+(status, %, uV, uA). Checked: System.map has s2mu005_fg_i2c_probe, DTB node
+present, emulator reaches the Linux entry. Expected: a "battery"-type supply
+with a plausible % (compare with TWRP's), ~3.7-4.35 V, current positive while
+charging.
