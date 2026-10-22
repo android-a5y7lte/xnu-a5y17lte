@@ -1404,6 +1404,11 @@ and watch `touch X,Y` lines. Photo/log into EVIDENCE.
 
 ## K8a. Wi-Fi hardware bring-up: built 2026-10-20, NOT yet tested (branch android-k8, on top of android-k1)
 
+> **Superseded by K8b (2026-10-23): do not build or flash a K8a or K5a image on
+> its own.** In those images the mmc1 (Wi-Fi SDIO) clocks are still off when
+> the kernel probes mmc1, which can hang the boot; K8b switches them on in
+> U-Boot first. Branches android-k8 and android-k5 now point at K8b.
+
 **Scope.** Step a of ANDROID-K8-WIFI-NOTES.md only: make the QCA9377 SDIO
 card show up on mmc1. No firmware, no wlan0 yet. Compiled only; no flashing,
 no eMMC write.
@@ -1440,6 +1445,11 @@ together), flash with TWRP -> Boot; in rescue: `a5-diag mmc1`,
 Without firmware ath10k will say it can't load firmware; that is expected.
 
 ## K5a. GPU power domain, CMU_G3D and `a5-diag gpu`: built 2026-10-20, NOT yet tested (branch android-k5, on top of android-k8)
+
+> **Superseded by K8b (2026-10-23): do not build or flash a K8a or K5a image on
+> its own.** In those images the mmc1 (Wi-Fi SDIO) clocks are still off when
+> the kernel probes mmc1, which can hang the boot; K8b switches them on in
+> U-Boot first. Branches android-k8 and android-k5 now point at K8b.
 
 **Scope.** Prepare the Mali-T830 without driving it: DT nodes, PM core, and a
 step-by-step diagnostic. No Panfrost yet (K5b). Compiled only; no flashing, no
