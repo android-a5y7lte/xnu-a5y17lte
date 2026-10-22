@@ -1621,3 +1621,51 @@ writes unchanged from K8b; reaches the Linux entry.
    (baud, flow-control pins, or BT_EN); firmware download errors = wrong file
    or baud patching; then try `max-speed = <115200>` to isolate the baud.
    Rollback: flash the M5e image.
+
+## K2. Real clock driver: Exynos7880 CMU_CCORE + shared CMU_PERI (built 2026-10-23, NOT yet tested on the phone; branch android-k2, on top of android-k9)
+
+**Image.** `out/a5y17lte-mainline-k2-boot.img`, 17,317,904 B, sha256
+`5d7a22f4ae1009b52ddba53e4a2a613fd436217cf1db69cc6e0e3b70cd32c2f9`, built at commit c51b070 (`MILESTONE=k2`). Same features as K9,
+but every SoC clock except the 26 MHz crystal now comes from real CMU drivers.
+**Flash only after K9 passed**: if K2 fails and K9 worked, the clock driver is
+the cause. eMMC and USB depend on it, so a failure can mean no eMMC / no USB;
+rollback = flash K9 (or M5e) from TWRP.
+
+**Finding (source reading).** The Exynos7880 CMU_CCORE (0x10680000) is the
+Exynos7870 CMU_MIF under another name: BUS_PLL/MEDIA_PLL (lock 0x20/0x40,
+con 0x120/0x140, pll_1417x = Samsung 14170) and every CMU output (muxes
+0x264-0x2cc, dividers 0x460-0x4cc, gates 0x860-0x8cc) have the same offsets,
+shifts and widths. Different: PLL mux registers (0x220 media, 0x224 bus, bit 12
+OSC/PLL + bit 21 gate), BUSD mux (0x240, 1 bit), HSI2C gates (0x84c, same bits),
+HSI2C/ADC_IF PCLKs (0x838 bits 16/17/22/23), ADC_IF OSC (0x800 bit 2); no
+MEM_PLL. A script compared each table entry against `S5E7880-cmusfr.h` /
+`S5E7880-cmu.c`: 0 mismatches. CMU_PERI: every Exynos7870 CMU_PERI clock has the
+same offset and bit on 7880 (only extra 7880 gates: TZPC, CHIPID, OTP, RTC).
+CMU_FSYS: already shared since M4.
+
+**Kernel patches.**
+- 0008 dt-bindings: `samsung,exynos7880-cmu-ccore` (clock: oscclk), and
+  `exynos7880-cmu-g3d` / `exynos7880-cmu-peri` with 7870 fallbacks.
+- 0009 clk: `clk-exynos7870.c` gets `ccore_cmu_info`: the CMU_MIF tables with
+  the differences above, the CMU_MIF names and IDs kept, so CMU_FSYS/G3D/PERI
+  find their parents unchanged. Reuses `mif_div_clks` as is.
+  W=1 clean; checkpatch --strict clean except "Missing Signed-off-by" (Jimmy
+  adds his own when sending; no AI sign-off). dt_binding_check not run (dtschema
+  not installable here); the YAML parses.
+
+**DT.** `cmu_ccore` and `cmu_peri` nodes; fixed clocks removed (eMMC biu/ciu,
+SDIO biu/ciu, FSYS bus/usb20drd inputs, G3D switch, BT UART pclk/baud).
+mmc0/mmc1: biu = `cmu_fsys MMCn_ACLK`, ciu = `cmu_ccore GOUT_MIF_CMU_FSYS_MMCn`
+(as mainline Exynos7870); serial1: `cmu_peri UART1_PCLK / UART1_EXT_UCLK`;
+cmu_fsys and cmu_g3d take their inputs from cmu_ccore. U-Boot's mmc1/UART
+clock setup stays (it also covers FSYS SDCLKIN, which the 7870 FSYS driver
+doesn't model). `clk_ignore_unused` stays on the command line.
+
+**Checks.** Full kernel + DTB build; the DTB has one fixed clock left
+(oscclk); emulator: U-Boot runs both clock scripts and reaches the Linux entry.
+
+**What to look at on the phone.** Boot to rescue, then
+`cat /sys/kernel/debug/clk/clk_summary | head -80`: `fout_mif_bus_pll` should
+read 1599 MHz, `gout_mif_cmu_fsys_mmc0` about 400 MHz (S-Boot's setting) or
+what dw_mmc asked for, `gout_mif_cmu_peri_uart1` about 50 MHz. eMMC (lsblk),
+USB networking, `a5-diag mmc1`, `a5-diag bt` as in K9.
