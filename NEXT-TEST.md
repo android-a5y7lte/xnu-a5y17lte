@@ -1,7 +1,7 @@
 # Next phone test (prepared 2026-10-23 in the cloud session)
 
-All images are in `out/` on branch **android-k6** (it contains every earlier
-branch). Flash with TWRP -> Install -> Install Image -> Boot. None of them writes
+All images are in `out/` on branch **android-k6** (it contains K1, K8, K5a,
+K9 and K2; K5b, Panfrost, is on its own branch android-k5b and not built). Flash with TWRP -> Install -> Install Image -> Boot. None of them writes
 the eMMC in rescue; hold **Volume Down** at the 3 s prompt for rescue, then
 `ssh root@172.16.42.1`. Rollback any time: flash the M5e image.
 
