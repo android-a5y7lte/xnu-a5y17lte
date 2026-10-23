@@ -1394,3 +1394,20 @@ further.
 
 **Untested from EVIDENCE 27's open list:** (1) plain `reboot -f` from rescue;
 (2) `mount -o remount,ro /` + `reboot -f` in Nura.
+
+**Addendum (2026-10-23): plain `reboot -f` from rescue mode also hangs.** Samsung
+logo for about 5 minutes, forced off with Volume Down + Power 10 s. (EVIDENCE 27
+lists this test as not run; Jimmy says an earlier session had already seen it,
+but it is recorded here as a run result.) Matrix so far:
+
+| Where | Command | Result |
+|---|---|---|
+| rescue | `reboot(RESTART2, "recovery")` (Power hold) | works, TWRP |
+| rescue | plain / `-f` (cmd NULL, INFORM3 untouched) | hangs |
+| Nura | plain `reboot` | hangs |
+| Nura | `reboot recovery` | hangs |
+
+So the environment is not the only variable: a named command works in rescue
+and a plain reboot does not. The earlier statement "INFORM3 theory close to
+excluded" is withdrawn; it only held for the recovery case. Nura + recovery
+hanging is still unexplained by that alone.
