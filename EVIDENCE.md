@@ -1355,3 +1355,42 @@ one line beside it at the beak row (row 4 of 10), same text and colours.
 Checked with busybox under qemu: `sh -n` and the screen emulator (widest
 column 53 of 67). Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `4b6fe1b0fef7061a852aca6d692d62f12ad0a3684008cb2ad04bc7197fa55116`
 (14626832 B), built at commit 55ed892, replacing `996ed364…`.
+
+## 28. Reboot hang: INFORM breadcrumb test, and `reboot recovery` also hangs (2026-10-22/23)
+
+**Test A: breadcrumb through the rescue-mode Power hold.** In rescue mode
+`pmu-poke` wrote PMU+0x81c = 0xdeadbeef. Then Power was held 3 s. That is not a
+hardware reset: `mainline/init/init.c:113-120` (and `a5-diag.c:466-471`) call
+`reboot(LINUX_REBOOT_CMD_RESTART2, "recovery")`, so it goes through
+reboot-mode (INFORM3 = 0x12345674) and syscon-reboot (PMU+0x400). **It worked
+and the phone reached TWRP** (the same result as in EVIDENCE 27). TWRP has no
+/dev/mem node, so the registers could only be read after TWRP -> Reboot ->
+System into Nura:
+
+| Register | Value after TWRP and a boot to Nura |
+|---|---|
+| PMU+0x81c (breadcrumb) | 0x00000000 (written 0xdeadbeef: **did not survive**) |
+| PMU+0x404 | 0x20000000 (same as EVIDENCE 27) |
+| INFORM2 (0x808) | 0x12345678 (Samsung's sec_reboot() marker, not written by us; same as EVIDENCE 27) |
+| INFORM3 (0x80c) | 0x00000000 |
+
+Two resets (rescue -> TWRP, TWRP -> Nura) and two Samsung-side stages (S-Boot,
+TWRP) sit between the write and the read, so the cleared breadcrumb does not say
+which of them cleared it. Not informative about the hang.
+
+**Test B: `sudo reboot recovery` inside Nura.** Same syscall as the Power hold in
+Test A. **It hung at the Samsung logo**, like plain `reboot`; forced power-off
+needed.
+
+**Reading.** The reset path is the same in A and B (RESTART2 "recovery" ->
+reboot-mode -> syscon-reboot), and A works while B hangs. So this does not
+contradict EVIDENCE 27: that entry only showed that the path works from the
+rescue init, and never that a named command works from Nura. What differs is
+the state of the system at reset time (Nura: OpenRC, rw ext4 on mmcblk0p19, more
+drivers bound, other shutdown callbacks), not the reset mechanism or the
+reboot-mode value. The INFORM3 theory is now close to excluded: the value
+0x12345674 is written in A and B alike. The breadcrumb test cannot decide it
+further.
+
+**Untested from EVIDENCE 27's open list:** (1) plain `reboot -f` from rescue;
+(2) `mount -o remount,ro /` + `reboot -f` in Nura.
