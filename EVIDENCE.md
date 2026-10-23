@@ -1411,3 +1411,12 @@ So the environment is not the only variable: a named command works in rescue
 and a plain reboot does not. The earlier statement "INFORM3 theory close to
 excluded" is withdrawn; it only held for the recovery case. Nura + recovery
 hanging is still unexplained by that alone.
+
+**Addendum 2 (2026-10-23): INFORM3 = 0x12345670 written from rescue, then `reboot -f`: still hangs at the Samsung logo.**
+Forced off. The INFORM3-marker theory is disproven for the plain reboot. Only
+RESTART2 "recovery" from rescue has been seen to work (INFORM3 = 0x12345674, and
+S-Boot then boots TWRP). Not yet known whether the hang is in S-Boot or in our
+U-Boot/Linux on a warm start: step 1b's uniLoader rebooted by PMU SWRESET every
+30 s and came back each time (EVIDENCE 12), and TWRP -> Reboot -> System boots
+our image, so a warm start of our payload can work; what is different after Linux
+has run is the hardware state it leaves behind.
