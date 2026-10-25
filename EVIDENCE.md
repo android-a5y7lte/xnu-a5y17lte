@@ -1450,3 +1450,19 @@ m5e image is unchanged. NOT yet run on the phone.
 hold already reaches TWRP). (2) `a5-diag reboot download`: Odin screen means
 S-Boot download mode works; a hang at the logo means S-Boot or the hardware
 state after Linux, not the mode string.
+
+**Result (Jimmy, 2026-10-25): `a5-diag reboot download` PASSED.** From rescue mode on
+`m5f`, the phone went to S-Boot's real Odin screen ("Downloading... Do not turn
+off target", teal background, download icon). So RESTART2 "download" ->
+reboot-mode (INFORM3 = 0x12345671) -> syscon-reboot (PMU+0x400) works, and
+S-Boot runs normally after our Linux has run.
+
+**Reading.** A warm reset after our Linux is not a general hardware or S-Boot
+failure: S-Boot starts and acts on INFORM3 (download here, recovery -> TWRP in
+EVIDENCE 27/28). The hang (plain reboot, `reboot -f`, INFORM3 = 0x12345670 in
+EVIDENCE 28) is on the path where S-Boot boots our own boot.img (our U-Boot and
+Linux), after Linux has run. TWRP -> Reboot -> System starts the same image
+fine, so what matters is the hardware state our Linux leaves behind, or what
+S-Boot does for a normal boot given that state. Not yet separated: whether the
+hang is in S-Boot before it hands over, in U-Boot, or in the kernel early boot.
+The `reboot recovery` control run was not reported in this test.
