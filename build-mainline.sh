@@ -80,7 +80,8 @@ UM=(make -C "$UBOOT" O="$B/u-boot" HOSTCC=clang CROSS_COMPILE="$XP/aarch64-none-
 "${UM[@]}" -j"$JOBS" u-boot.bin tools >/dev/null
 
 echo "== FIT payload"
-cp "$ML/boot.cmd" "$ML/a5y17lte.its" "$B/fit/"
+cp "$ML/a5y17lte.its" "$B/fit/"
+cp "$ML/${BOOTCMD:-boot.cmd}" "$B/fit/boot.cmd"
 # mkimage runs "dtc" from PATH (compile-time MKIMAGE_DTC); use the one U-Boot built
 ln -sf "$B/u-boot/scripts/dtc/dtc" "$LC/dtc"
 ( cd "$B/fit" && "$B/u-boot/tools/mkimage" -f a5y17lte.its "$B/a5y17lte.fit" >/dev/null )

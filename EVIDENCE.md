@@ -1486,3 +1486,18 @@ our Linux and this boot. Whatever our Linux leaves behind survives an Odin
 session (PMIC/MUIC registers, eMMC card state, DRAM contents, PMU INFORM
 registers), or S-Boot's normal-boot path breaks after any reset that is not a
 power cut. A forced power-off followed by power-on boots fine.
+
+**Baseline PMU dump after a clean cold boot into rescue (Jimmy, 2026-10-25),
+`pmu-peek`:** 0x404 = 0x20000000, 0x800 = 0, 0x804 = 0, INFORM2 0x808 =
+0x12345678, INFORM3 0x80c = 0, 0x810 = 0, 0x814 = 0x00003100 (new, meaning
+unknown), 0x818 = bus error (pmu-peek died there; 0x81c not read). The fault is
+probably a secure-world-only register; not verified.
+
+**Unplugged-cable test (Jimmy): hangs too.** USB cable pulled before
+`reboot -f` from rescue: still the Samsung logo for the usual time. So cable
+and charger detection are not the cause. The MUIC *register* state (manual mode
+set by `a5-diag muic`) survives a reset and is not excluded by this.
+
+**Next: U-Boot-only reset test** (`mainline/boot-reset-test.cmd`: banner, 8 s,
+`reset`, no Linux). Loops back to the banner: Linux leaves the bad state, then
+bisect drivers. Hangs at the logo: U-Boot or the reset is at fault.
