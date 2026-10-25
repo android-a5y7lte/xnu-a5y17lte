@@ -1531,3 +1531,17 @@ could appear whether or not U-Boot ran. It says nothing about the hang. EVIDENCE
 **v3 (`ubreset3`).** Same script plus `mw.l 0x14830070 0x10` after the draw. Same
 reading of outcomes as v2. Note the panel keeps its own frame memory: if S-Boot
 never redraws after the reset, a stale band stays instead of the Samsung logo.
+
+**v3 result (Jimmy, 2026-10-25): an orange/red band at the top, together with the
+Samsung logo, completely static for about 5 minutes; never cycled, never
+vanished, never came back.** Forced off. Reading, with the limits: U-Boot ran
+(the band exists) and `dcache off` + DECON trigger work, so the framebuffer
+method is good. But the picture does not tell whether the reset happened. (a)
+The SWRESET write from U-Boot did not reset and U-Boot sat at its prompt after
+the script ended; or (b) it reset, S-Boot drew its logo without clearing the
+framebuffer in DRAM (which still held our band), and then never started our
+U-Boot again. Both look identical. Not concluded.
+
+**v4 (`ubreset4`)** separates them: green stripes every second for 10 s after the
+reset write (stripes = no reset), and a DRAM marker that turns the next boot's
+band blue (blue = S-Boot started our U-Boot again).
