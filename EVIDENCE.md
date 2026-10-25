@@ -1723,3 +1723,26 @@ DECON HW trigger (0x14830070 = 0x10), waits 2 s, then writes PMU SWRESET. A
 stripe on screen = the checkpoint was reached. A loop = a stripe, the logo,
 the console, a stripe, ... (the U-Boot band does not appear here; only the
 kernel's stripe).
+
+**rst8 v2 result (Jimmy, 2026-10-25): checkpoint 8 REACHED, then the plain reset
+hung at the Samsung logo (no loop).** Photo `evidence/hw-mainline-rst8-checkpoint8-2026-10-25.jpg`:
+the kernel log shows `[0.179777] a5rst: checkpoint 8, PMU SWRESET in 2 s`, after
+all initcalls (`clk: Not disabling unused clocks` just before it) and before any
+userspace. The eMMC was probed on another CPU meanwhile (0.24-0.31 s: "new high
+speed DDR MMC card", mmcblk0 p1-p25). No white stripe is visible in the photo;
+likely the console scroll repainted over it (not checked), so the log line is
+the proof. The whole kernel boot, from entry to this point, takes 0.18 s.
+
+**Conclusion.** Booting the kernel to the end of its initcalls, with no
+userspace and no `reboot` syscall, is enough: a plain SWRESET after it hangs,
+while a plain SWRESET from U-Boot alone loops (v7). The cause is therefore
+inside the kernel's own boot, between U-Boot's `bootm` and checkpoint 8.
+INFORM3 is not the issue for a plain reset here; the `reboot -f` path is not
+either.
+
+**Next checkpoints** (`mainline/debug/a5-rstlvl.patch` extended): 11 = in
+`start_kernel()` right after `setup_arch()` (fixmap mappings, counter-based
+2 s wait), 10 = start of `kernel_init_freeable()`, 0-7 = after initcall level N.
+Images `rst10` and `rst11` are built. Order: 10 first (midpoint). Hang at 10:
+test 11, then head.S. Loop at 10: bisect levels 0-7 (all within about 0.15 s of
+boot).

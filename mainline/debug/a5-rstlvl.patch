@@ -1,16 +1,43 @@
 diff --git a/init/main.c b/init/main.c
-index e363232b4..f4691c46b 100644
+index e363232b4..b009ee69e 100644
 --- a/init/main.c
 +++ b/init/main.c
-@@ -1394,6 +1394,47 @@ static int __init ignore_unknown_bootoption(char *param, char *val,
+@@ -95,6 +95,8 @@
+ #include <linux/integrity.h>
+ #include <linux/proc_ns.h>
+ #include <linux/io.h>
++#include <asm/early_ioremap.h>
++#include <asm/sysreg.h>
+ #include <linux/cache.h>
+ #include <linux/rodata_test.h>
+ #include <linux/jump_label.h>
+@@ -968,6 +970,8 @@ static void __init print_kernel_cmdline(const char *cmdline)
+ 		pr_notice("%s%s\n", KERNEL_CMDLINE_PREFIX, cmdline);
+ }
+ 
++static void __init a5_rst(int n);
++
+ asmlinkage __visible __init __no_sanitize_address __noreturn __no_stack_protector
+ void start_kernel(void)
+ {
+@@ -992,6 +996,7 @@ void start_kernel(void)
+ 	page_address_init();
+ 	pr_notice("%s", linux_banner);
+ 	setup_arch(&command_line);
++	a5_rst(11);
+ 	mm_core_init_early();
+ 	/* Static keys and static calls are needed by LSMs */
+ 	jump_label_init();
+@@ -1394,6 +1399,57 @@ static int __init ignore_unknown_bootoption(char *param, char *val,
  	return 0;
  }
  
 +/*
 + * a5y17lte reset bisect (EVIDENCE 29), debug only: a5rst=N makes the kernel
 + * write the Exynos7880 PMU SWRESET register itself at checkpoint N:
-+ * 10 = start of kernel_init_freeable(), 0-7 = after initcall level N,
-+ * 8 = after all initcalls, before userspace.
++ * 11 = in start_kernel() right after setup_arch(), 10 = start of
++ * kernel_init_freeable(), 0-7 = after initcall level N, 8 = after all
++ * initcalls, before userspace.
 + */
 +static int a5_rstlvl __initdata = -1;
 +
@@ -23,8 +50,9 @@ index e363232b4..f4691c46b 100644
 +static void __init a5_rst(int n)
 +{
 +	void __iomem *fb, *decon, *p;
-+	int row = n == 10 ? 60 : 130 + 70 * n;	/* one white stripe per checkpoint */
-+	int i;
++	int row = 130 + 70 * n;		/* one white stripe per checkpoint */
++	int i, early = n == 11;		/* before mm_init(): fixmap mappings */
++	u64 t;
 +
 +	if (a5_rstlvl != n)
 +		return;
@@ -34,14 +62,22 @@ index e363232b4..f4691c46b 100644
 +	 * stripe into S-Boot's framebuffer and set the HW trigger ourselves,
 +	 * so a stripe on screen proves this checkpoint was reached.
 +	 */
-+	fb = ioremap_wc(0x67000000UL + row * 4320UL, 40 * 4320UL);
-+	decon = ioremap(0x14830070, 4);
++	if (early) {
++		fb = early_ioremap(0x67000000UL + row * 4320UL, 40 * 4320UL);
++		decon = early_ioremap(0x14830070, 4);
++	} else {
++		fb = ioremap_wc(0x67000000UL + row * 4320UL, 40 * 4320UL);
++		decon = ioremap(0x14830070, 4);
++	}
 +	for (i = 0; i < 40 * 1080; i++)
 +		writel(0xffffffff, fb + i * 4);
 +	writel(0x10, decon);
 +	pr_info("a5rst: checkpoint %d, PMU SWRESET in 2 s\n", n);
-+	mdelay(2000);
-+	p = ioremap(0x106b0400, 4);
++	/* timers are not up at 11: spin on the counter (26 MHz) */
++	t = read_sysreg(cntvct_el0);
++	while (read_sysreg(cntvct_el0) - t < 52000000UL)
++		cpu_relax();
++	p = early ? early_ioremap(0x106b0400, 4) : ioremap(0x106b0400, 4);
 +	writel(1, p);
 +	for (;;)
 +		cpu_relax();
@@ -50,7 +86,7 @@ index e363232b4..f4691c46b 100644
  static void __init do_initcall_level(int level, char *command_line)
  {
  	initcall_entry_t *fn;
-@@ -1407,6 +1448,7 @@ static void __init do_initcall_level(int level, char *command_line)
+@@ -1407,6 +1463,7 @@ static void __init do_initcall_level(int level, char *command_line)
  	do_trace_initcall_level(initcall_level_names[level]);
  	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
  		do_one_initcall(initcall_from_entry(fn));
@@ -58,7 +94,7 @@ index e363232b4..f4691c46b 100644
  }
  
  static void __init do_initcalls(void)
-@@ -1548,6 +1590,7 @@ static int __ref kernel_init(void *unused)
+@@ -1548,6 +1605,7 @@ static int __ref kernel_init(void *unused)
  	kernel_init_freeable();
  	/* need to finish all async __init code before freeing the memory */
  	async_synchronize_full();
@@ -66,7 +102,7 @@ index e363232b4..f4691c46b 100644
  
  	system_state = SYSTEM_FREEING_INITMEM;
  	kprobe_free_init_mem();
-@@ -1630,6 +1673,7 @@ static noinline void __init kernel_init_freeable(void)
+@@ -1630,6 +1688,7 @@ static noinline void __init kernel_init_freeable(void)
  {
  	/* Now the scheduler is fully set up and can do blocking allocations */
  	gfp_allowed_mask = __GFP_BITS_MASK;
