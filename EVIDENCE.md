@@ -1519,3 +1519,15 @@ not say where the boot stopped: S-Boot, our U-Boot, or early Linux.
 a red band into S-Boot's framebuffer (0x67000000), `dcache off` (CMD_CACHE is
 enabled only for test builds, via BOOTCMD), waits 8 s, then does the PMU
 SWRESET write (`mw.l 0x106b0400 1`). A band after the logo means our U-Boot ran.
+
+**v2 result (Jimmy, 2026-10-25): no red band at all, only the Samsung logo.
+INVALID again: my script never triggered DECON.** The panel is MIPI command mode
+(EVIDENCE 11): it only shows new framebuffer content after a DECON trigger
+(`HW_SW_TRIG_CONTROL` 0x14830070 = 0x10 in `a5-diag panel`, proven EVIDENCE 13).
+v2 wrote the framebuffer and flushed the cache but did not trigger, so no band
+could appear whether or not U-Boot ran. It says nothing about the hang. EVIDENCE
+11 already had this; I should have applied it.
+
+**v3 (`ubreset3`).** Same script plus `mw.l 0x14830070 0x10` after the draw. Same
+reading of outcomes as v2. Note the panel keeps its own frame memory: if S-Boot
+never redraws after the reset, a stale band stays instead of the Samsung logo.

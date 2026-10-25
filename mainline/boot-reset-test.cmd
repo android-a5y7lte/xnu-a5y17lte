@@ -3,13 +3,17 @@
 # test (v1) showed nothing and did not reset. v2 draws through S-Boot's
 # framebuffer (0x67000000, 1080 wide, ARGB8888) and resets with the PMU SWRESET
 # write that Linux uses (0x106b0400 = 1).
+#   (v2 had no DECON trigger, so the band could not appear.)
 #   red band (200 rows) = this U-Boot ran; 8 s later the phone resets.
 #   band comes back every ~10 s: S-Boot warm-boots our U-Boot fine.
 #   Samsung logo only, no band after the first reset: S-Boot (or the reset)
 #   never reaches our U-Boot, Linux is not involved.
-# Build: BOOTCMD=boot-reset-test.cmd MILESTONE=ubreset2 ./build-mainline.sh
+# Build: BOOTCMD=boot-reset-test.cmd MILESTONE=ubreset3 ./build-mainline.sh
 mw.l 0x67000000 0xffff0000 0x34bc0
 dcache off
+# command-mode panel: only shows the new frame after a DECON trigger
+# (EVIDENCE 11, 13); HW/TE trigger, same value a5-diag panel writes
+mw.l 0x14830070 0x10
 echo "a5y17lte: U-BOOT RESET TEST v2 (no Linux), resetting in 8 s"
 sleep 8
 mw.l 0x106b0400 1
