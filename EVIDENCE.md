@@ -1663,3 +1663,23 @@ Next, one change at a time, cheapest first:
   Loops = Linux scribbles on a DRAM area the next boot needs; then bisect by size.
   Caveat: a named reset (recovery/download) works after Linux, so any theory
   must explain why only the plain path breaks.
+
+**nosmp result (Jimmy, 2026-10-25): "STAGE 0 reached" printed, then the plain reboot
+hung at the Samsung logo (about 5 minutes, forced off). Same as stage 0 and bl1.**
+Photo: `evidence/hw-mainline-nosmp-2026-10-25.jpg`.
+
+**Correction to my earlier message.** Jimmy first described the photo as a
+"second boot attempt" (a second KERNEL MODE banner and an mmc_host line). I
+treated that as a change in behaviour. That was wrong. The photo shows ONE boot:
+init draws a banner at the top and pins a second copy at the bottom
+(`mainline/rootfs/init`, banner comment), the "STAGE 0 reached: plain reboot -f
+in 3 s" line sits below the top banner, and the mmc_host line is stamped
+`[ 0.304065]`, an early kernel message of the same boot, shown on the last row of
+the scroll region. The frame was taken before the reboot; no Samsung logo is in
+it. So `nosmp` did not change anything: the first plain reboot hangs.
+
+**Reading.** Starting no secondary CPU does not help, so PSCI CPU_ON and the
+parked secondaries are not the cause (the boot CPU still runs, and the
+PSCI/monitor path is otherwise unchanged). Still open: DRAM use (`mem512`,
+built), and the core drivers (CMU, pinctrl, PMU, GIC/timer, simpledrm/fbcon,
+regulators).
