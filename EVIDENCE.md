@@ -1645,3 +1645,21 @@ Test `bl1` (STAGE=0): blacklist `dw_mci_exynos_pltfm_driver_init`,
 `i2c_gpio_init`. Loops = the cause is among those; then split (eMMC / USB /
 rest). Still hangs = core drivers (pinctrl, CMU, PMU, power domains, timers) or
 DRAM use; then DT node bisect and a `mem=` test.
+
+**bl1 result (Jimmy, 2026-10-25): "STAGE 0 reached" printed, then the plain reboot
+HUNG at the Samsung logo again.** eMMC (dw_mci), USB (dwc3 + PHY), gpio-keys
+and i2c-gpio are not needed for the hang (their initcalls were blacklisted).
+
+What is left at stage 0 is small (`mainline/dts/exynos7880*.dts*`): 8 Cortex-A53
+CPUs brought up by PSCI v0.1 (calls into Samsung's secure monitor), GIC, arch
+timer, the two pinctrl blocks, CMU_FSYS, the PMU syscon (syscon-reboot and
+-mode), fixed clocks/regulators, simpledrm/fbcon, and all of DRAM.
+
+Next, one change at a time, cheapest first:
+- `nosmp` (image `nosmp`): no secondary CPU is started, so no PSCI CPU_ON.
+  Linux stops the other cores with an IPI at restart but never powers them off
+  through PSCI, which Samsung's own kernel may do. Loops = SMP/PSCI is the cause.
+- `mem=512M` (image `mem512`): Linux only touches the first 512 MB of DRAM.
+  Loops = Linux scribbles on a DRAM area the next boot needs; then bisect by size.
+  Caveat: a named reset (recovery/download) works after Linux, so any theory
+  must explain why only the plain path breaks.
