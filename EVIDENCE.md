@@ -1587,3 +1587,16 @@ a rate from the DT.
 
 **v6 (`ubreset6`)** has no `sleep`: it waits by filling scratch DRAM, then
 INFORM3 = recovery and SWRESET as in v5.
+
+**v6 result (Jimmy, 2026-10-25): red, green, blue stripe, then the phone RESET and
+landed in TWRP; no hang.** So a PMU SWRESET written from our U-Boot (no Linux),
+with INFORM3 = 0x12345674, works, and S-Boot runs the recovery path. Timing:
+the `for` loop delays work where `sleep` did not.
+
+Limits of this result. It was a *named* reset (recovery). The plain reset from
+U-Boot is not tested, so "plain reset hangs in S-Boot" is still the old
+Linux-side observation, not something v6 shows. And uniLoader's plain SWRESET
+loop worked (EVIDENCE 12), so a plain reset is not poison for every payload.
+
+**v7 (`ubreset7`)**: same as v6 but INFORM3 = 0 (plain), with the DRAM marker
+(second boot draws blue). Loops if it works.
