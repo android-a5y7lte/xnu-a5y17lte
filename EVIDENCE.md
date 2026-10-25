@@ -1707,3 +1707,19 @@ left alone (plain reset). Build: `RSTLVL=N MILESTONE=rstN ./build-mainline.sh`.
 Loops (logo, then the console banner again, repeatedly) = fine up to there;
 hang at the logo = the cause is at or before checkpoint N. Start with 8
 (everything in the kernel, no userspace, no `reboot` syscall).
+
+**rst8 v1 result (Jimmy, 2026-10-25): nothing readable on screen, a brief
+flash/flicker, then straight to the Samsung logo, stuck (about 5 minutes, forced
+off). INVALID, the same trap as v2 of the U-Boot test.** The panel is
+command-mode and only updates after a DECON trigger (EVIDENCE 11, 13); that
+trigger is set by `a5-diag panel` in init, and checkpoint 8 runs before
+userspace. So nothing could be seen whether or not the checkpoint was reached,
+and a logo that stays does not show a reset happened.
+
+**rst8 v2** (image `rst8`, sha256 `cc11bd9a…fa18d4`, replaces v1): at the
+checkpoint the kernel draws a white stripe into S-Boot's framebuffer
+(0x67000000, row 130 + 70 * N, 40 rows; row 60 for checkpoint 10), writes the
+DECON HW trigger (0x14830070 = 0x10), waits 2 s, then writes PMU SWRESET. A
+stripe on screen = the checkpoint was reached. A loop = a stripe, the logo,
+the console, a stripe, ... (the U-Boot band does not appear here; only the
+kernel's stripe).

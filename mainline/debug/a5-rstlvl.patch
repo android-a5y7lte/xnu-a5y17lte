@@ -1,8 +1,8 @@
 diff --git a/init/main.c b/init/main.c
-index e363232b4..b86a8a111 100644
+index e363232b4..f4691c46b 100644
 --- a/init/main.c
 +++ b/init/main.c
-@@ -1394,6 +1394,34 @@ static int __init ignore_unknown_bootoption(char *param, char *val,
+@@ -1394,6 +1394,47 @@ static int __init ignore_unknown_bootoption(char *param, char *val,
  	return 0;
  }
  
@@ -22,13 +22,26 @@ index e363232b4..b86a8a111 100644
 +
 +static void __init a5_rst(int n)
 +{
-+	void __iomem *p;
++	void __iomem *fb, *decon, *p;
++	int row = n == 10 ? 60 : 130 + 70 * n;	/* one white stripe per checkpoint */
++	int i;
 +
 +	if (a5_rstlvl != n)
 +		return;
++	/*
++	 * The command-mode panel only shows new frames after a DECON trigger
++	 * (EVIDENCE 11, 13), and no userspace runs here to set it: draw a
++	 * stripe into S-Boot's framebuffer and set the HW trigger ourselves,
++	 * so a stripe on screen proves this checkpoint was reached.
++	 */
++	fb = ioremap_wc(0x67000000UL + row * 4320UL, 40 * 4320UL);
++	decon = ioremap(0x14830070, 4);
++	for (i = 0; i < 40 * 1080; i++)
++		writel(0xffffffff, fb + i * 4);
++	writel(0x10, decon);
++	pr_info("a5rst: checkpoint %d, PMU SWRESET in 2 s\n", n);
++	mdelay(2000);
 +	p = ioremap(0x106b0400, 4);
-+	pr_info("a5rst: checkpoint %d, PMU SWRESET in 300 ms\n", n);
-+	mdelay(300);
 +	writel(1, p);
 +	for (;;)
 +		cpu_relax();
@@ -37,7 +50,7 @@ index e363232b4..b86a8a111 100644
  static void __init do_initcall_level(int level, char *command_line)
  {
  	initcall_entry_t *fn;
-@@ -1407,6 +1435,7 @@ static void __init do_initcall_level(int level, char *command_line)
+@@ -1407,6 +1448,7 @@ static void __init do_initcall_level(int level, char *command_line)
  	do_trace_initcall_level(initcall_level_names[level]);
  	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
  		do_one_initcall(initcall_from_entry(fn));
@@ -45,7 +58,7 @@ index e363232b4..b86a8a111 100644
  }
  
  static void __init do_initcalls(void)
-@@ -1548,6 +1577,7 @@ static int __ref kernel_init(void *unused)
+@@ -1548,6 +1590,7 @@ static int __ref kernel_init(void *unused)
  	kernel_init_freeable();
  	/* need to finish all async __init code before freeing the memory */
  	async_synchronize_full();
@@ -53,7 +66,7 @@ index e363232b4..b86a8a111 100644
  
  	system_state = SYSTEM_FREEING_INITMEM;
  	kprobe_free_init_mem();
-@@ -1630,6 +1660,7 @@ static noinline void __init kernel_init_freeable(void)
+@@ -1630,6 +1673,7 @@ static noinline void __init kernel_init_freeable(void)
  {
  	/* Now the scheduler is fully set up and can do blocking allocations */
  	gfp_allowed_mask = __GFP_BITS_MASK;
