@@ -1626,3 +1626,22 @@ Reading: loops every few seconds = this stage is fine; Samsung logo for a
 minute or more = the hang is at or before stage N. Start with 0: if it hangs,
 the kernel's own drivers are enough and userspace is innocent; if it loops, go
 to 2, then 4, then 5.
+
+**Stage 0 result (Jimmy, 2026-10-25): "STAGE 0 reached" printed, then the plain
+`reboot -f` HUNG at the Samsung logo (no loop, no recovery). Forced off.** So the
+hang needs only the kernel plus init's mounts and `a5-diag panel`; the later
+userspace steps (`usb`, `muic`, ...) are not needed. (Not strictly "userspace
+innocent": init's mounts and the panel trigger are still in the picture, but
+they touch no hardware that survives a reset, as far as I know.)
+
+**Kernel bisect, by `initcall_blacklist=` (no DT change).** `build-mainline.sh`
+now takes `BARGS` (extra kernel arguments, added to the DT bootargs by the boot
+script) next to `STAGE`. Names from `upstream/linux/System.map`. Stage 0 needs
+no disk, so the storage and USB drivers can be left out.
+
+Test `bl1` (STAGE=0): blacklist `dw_mci_exynos_pltfm_driver_init`,
+`dw_mci_pltfm_driver_init` (eMMC), `dwc3_exynos_driver_init`,
+`dwc3_driver_init`, `exynos5_usb3drd_phy_init` (USB), `gpio_keys_init`,
+`i2c_gpio_init`. Loops = the cause is among those; then split (eMMC / USB /
+rest). Still hangs = core drivers (pinctrl, CMU, PMU, power domains, timers) or
+DRAM use; then DT node bisect and a `mem=` test.

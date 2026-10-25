@@ -84,10 +84,12 @@ UM=(make -C "$UBOOT" O="$B/u-boot" HOSTCC=clang CROSS_COMPILE="$XP/aarch64-none-
 echo "== FIT payload"
 cp "$ML/a5y17lte.its" "$B/fit/"
 cp "$ML/${BOOTCMD:-boot.cmd}" "$B/fit/boot.cmd"
-# STAGE=N: boot with a5.stage=N added to the DT bootargs (init stops after step N)
-if [ -n "${STAGE:-}" ]; then
+# STAGE=N: boot with a5.stage=N added to the DT bootargs (init stops after step N);
+# BARGS="...": more kernel arguments (EVIDENCE 29 bisect, e.g. initcall_blacklist=)
+if [ -n "${STAGE:-}${BARGS:-}" ]; then
 	BA="$(sed -n 's/^[[:space:]]*bootargs = "\(.*\)";/\1/p' "$ML/dts/exynos7880-a5y17lte.dts" | head -1)"
-	sed -i "s|^bootm |setenv bootargs \"$BA a5.stage=$STAGE\"\nbootm |" "$B/fit/boot.cmd"
+	BA="$BA${STAGE:+ a5.stage=$STAGE}${BARGS:+ $BARGS}"
+	sed -i "s|^bootm |setenv bootargs \"$BA\"\nbootm |" "$B/fit/boot.cmd"
 fi
 # mkimage runs "dtc" from PATH (compile-time MKIMAGE_DTC); use the one U-Boot built
 ln -sf "$B/u-boot/scripts/dtc/dtc" "$LC/dtc"
