@@ -1683,3 +1683,27 @@ parked secondaries are not the cause (the boot CPU still runs, and the
 PSCI/monitor path is otherwise unchanged). Still open: DRAM use (`mem512`,
 built), and the core drivers (CMU, pinctrl, PMU, GIC/timer, simpledrm/fbcon,
 regulators).
+
+**mem512 result (Jimmy, 2026-10-25): the usual single-boot screen (STAGE 0 line +
+pinned banner), then the plain reboot hung at the Samsung logo.** So Linux using
+DRAM above 512 MB is not the cause. (It still uses the first 512 MB, including
+S-Boot's own area around 0x43e00000, EVIDENCE 11; that stays open.)
+
+**Why bisect inside the kernel instead of by driver.** Facts so far: plain reset
+from U-Boot alone loops (v7); a named reset (recovery, download) after Linux
+works; a plain reset after Linux hangs, with every driver group tried so far
+removed (eMMC, USB, keys, i2c, SMP) and with DRAM use cut to 512 MB. One more
+hint from the code: `reboot -f` and the named resets run the same
+`kernel_restart()` path in Linux (device shutdown, syscon-reboot), so that path
+is not what differs; INFORM3 is.
+
+**Checkpoint bisect.** `mainline/debug/a5-rstlvl.patch` (debug only, applied for
+the build when `RSTLVL=N` is set, then reverted; never committed to the kernel
+branch) adds `a5rst=N` to the kernel command line: the kernel writes PMU SWRESET
+itself (0x106b0400 = 1, after a 300 ms delay) at checkpoint N: 10 = start of
+`kernel_init_freeable()`, 0-7 = after initcall level N (core, postcore, arch,
+subsys, fs, device, late), 8 = after all initcalls, before userspace. INFORM3 is
+left alone (plain reset). Build: `RSTLVL=N MILESTONE=rstN ./build-mainline.sh`.
+Loops (logo, then the console banner again, repeatedly) = fine up to there;
+hang at the logo = the cause is at or before checkpoint N. Start with 8
+(everything in the kernel, no userspace, no `reboot` syscall).

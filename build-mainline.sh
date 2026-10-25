@@ -55,7 +55,10 @@ grep -q exynos7880-a5y17lte "$LINUX/arch/arm64/boot/dts/exynos/Makefile" || \
 		"$LINUX/arch/arm64/boot/dts/exynos/Makefile"
 KM=(make -C "$LINUX" ARCH=arm64 LLVM=1)
 KCONFIG_ALLCONFIG="$ML/config/a5y17lte.config" "${KM[@]}" allnoconfig >/dev/null
+# RSTLVL=N: debug patch, the kernel resets itself at checkpoint N (EVIDENCE 29)
+[ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply "$ML/debug/a5-rstlvl.patch"
 "${KM[@]}" -j"$JOBS" Image exynos/exynos7880-a5y17lte.dtb headers usr_gen_init_cpio >/dev/null
+[ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply -R "$ML/debug/a5-rstlvl.patch"
 cp "$LINUX/arch/arm64/boot/Image" "$LINUX/arch/arm64/boot/dts/exynos/exynos7880-a5y17lte.dtb" "$B/fit/"
 
 echo "== userspace (busybox, dropbear, a5-diag) + initramfs"
@@ -86,6 +89,7 @@ cp "$ML/a5y17lte.its" "$B/fit/"
 cp "$ML/${BOOTCMD:-boot.cmd}" "$B/fit/boot.cmd"
 # STAGE=N: boot with a5.stage=N added to the DT bootargs (init stops after step N);
 # BARGS="...": more kernel arguments (EVIDENCE 29 bisect, e.g. initcall_blacklist=)
+[ -z "${RSTLVL:-}" ] || BARGS="${BARGS:+$BARGS }a5rst=$RSTLVL"
 if [ -n "${STAGE:-}${BARGS:-}" ]; then
 	BA="$(sed -n 's/^[[:space:]]*bootargs = "\(.*\)";/\1/p' "$ML/dts/exynos7880-a5y17lte.dts" | head -1)"
 	BA="$BA${STAGE:+ a5.stage=$STAGE}${BARGS:+ $BARGS}"
