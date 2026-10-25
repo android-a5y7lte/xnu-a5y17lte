@@ -1457,6 +1457,8 @@ off target", teal background, download icon). So RESTART2 "download" ->
 reboot-mode (INFORM3 = 0x12345671) -> syscon-reboot (PMU+0x400) works, and
 S-Boot runs normally after our Linux has run.
 
+Photo: `evidence/hw-mainline-m5f-odin-download-2026-10-25.jpg` (the Odin download screen).
+
 **Reading.** A warm reset after our Linux is not a general hardware or S-Boot
 failure: S-Boot starts and acts on INFORM3 (download here, recovery -> TWRP in
 EVIDENCE 27/28). The hang (plain reboot, `reboot -f`, INFORM3 = 0x12345670 in
