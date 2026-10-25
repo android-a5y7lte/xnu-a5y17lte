@@ -1468,3 +1468,21 @@ fine, so what matters is the hardware state our Linux leaves behind, or what
 S-Boot does for a normal boot given that state. Not yet separated: whether the
 hang is in S-Boot before it hands over, in U-Boot, or in the kernel early boot.
 The control `a5-diag reboot recovery` (run before the download test, Jimmy) landed in TWRP, same as the Power-hold path.
+
+**Odin exit test (Jimmy, 2026-10-25): hangs too.** On the "Downloading..." screen
+Volume Down did nothing (that screen has no cancel; the cancel key belongs to
+the warning screen, which `reboot download` skips). Volume Down + Power held
+together rebooted the phone to the Samsung logo, where it stayed about 5
+minutes; forced off again. Matrix addition:
+
+| Where | Command | Result |
+|---|---|---|
+| Odin (S-Boot download mode) | Volume Down + Power | hangs at the logo |
+
+Caveat: the keys may still have been held when S-Boot sampled them after the
+reset, so this is not a clean "normal boot" test. What it does show: the hang
+does not need our Linux's shutdown path, since S-Boot itself was running between
+our Linux and this boot. Whatever our Linux leaves behind survives an Odin
+session (PMIC/MUIC registers, eMMC card state, DRAM contents, PMU INFORM
+registers), or S-Boot's normal-boot path breaks after any reset that is not a
+power cut. A forced power-off followed by power-on boots fine.
