@@ -76,6 +76,8 @@ UM=(make -C "$UBOOT" O="$B/u-boot" HOSTCC=clang CROSS_COMPILE="$XP/aarch64-none-
 "${UM[@]}" a5y17lte_defconfig >/dev/null
 "$UBOOT/scripts/config" --file "$B/u-boot/.config" \
 	--enable POSITION_INDEPENDENT --disable TOOLS_MKEFICAPSULE
+# test images (BOOTCMD set) need "dcache off" to flush framebuffer writes
+[ -z "${BOOTCMD:-}" ] || "$UBOOT/scripts/config" --file "$B/u-boot/.config" --enable CMD_CACHE
 "${UM[@]}" olddefconfig >/dev/null
 "${UM[@]}" -j"$JOBS" u-boot.bin tools >/dev/null
 

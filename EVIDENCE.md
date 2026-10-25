@@ -1501,3 +1501,21 @@ set by `a5-diag muic`) survives a reset and is not excluded by this.
 **Next: U-Boot-only reset test** (`mainline/boot-reset-test.cmd`: banner, 8 s,
 `reset`, no Linux). Loops back to the banner: Linux leaves the bad state, then
 bisect drivers. Hangs at the logo: U-Boot or the reset is at fault.
+
+**U-Boot-only reset test v1 (Jimmy, 2026-10-25): Samsung logo from the first
+reset on, banner never seen. INVALID as a test, my mistake.** The built U-Boot
+(`build/u-boot/.config`) has no video driver (no CONFIG_VIDEO), `# CONFIG_SYSRESET
+is not set`, and on arm64 `reset_cpu()` in `arch/arm/mach-exynos/soc.c` is empty
+(it only writes SWRESET `#ifdef CONFIG_CPU_V7A`). So `echo` shows nothing on the
+screen, and `reset` did not reset: the phone most likely sat in U-Boot with the
+Samsung logo still up. The conclusion "not Linux" does not follow. (Not run
+after: whether the phone was really still in U-Boot.)
+
+**Consequence for the real hang.** In the real image the screen also stays on
+the Samsung logo until Linux draws its console, so "logo for 5 minutes" does
+not say where the boot stopped: S-Boot, our U-Boot, or early Linux.
+
+**v2 (`mainline/boot-reset-test.cmd`, image `ubreset2`, not yet flashed).** Draws
+a red band into S-Boot's framebuffer (0x67000000), `dcache off` (CMD_CACHE is
+enabled only for test builds, via BOOTCMD), waits 8 s, then does the PMU
+SWRESET write (`mw.l 0x106b0400 1`). A band after the logo means our U-Boot ran.
