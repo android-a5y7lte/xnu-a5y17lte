@@ -1465,4 +1465,4 @@ Linux), after Linux has run. TWRP -> Reboot -> System starts the same image
 fine, so what matters is the hardware state our Linux leaves behind, or what
 S-Boot does for a normal boot given that state. Not yet separated: whether the
 hang is in S-Boot before it hands over, in U-Boot, or in the kernel early boot.
-The `reboot recovery` control run was not reported in this test.
+The control `a5-diag reboot recovery` (run before the download test, Jimmy) landed in TWRP, same as the Power-hold path.
