@@ -26,6 +26,17 @@ mount -t configfs configfs /sys/kernel/config
 mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
+# EVIDENCE 29 bisect: with a5.stage=N on the kernel command line (build with
+# STAGE=N ./build-mainline.sh) init stops after step N and does a plain
+# reboot -f (RB_AUTOBOOT, no command), to see which step makes it hang.
+stage_check() {
+	case " $(cat /proc/cmdline) " in *" a5.stage=$1 "*) ;; *) return ;; esac
+	echo " STAGE $1 reached: plain reboot -f in 3 s"
+	sleep 3
+	sync
+	reboot -f
+}
+
 # Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
 # 1080x1920). A banner is BH rows tall with the label on one line at row 4,
 # white on the banner colour (a lit cell is a space with a coloured
@@ -70,6 +81,7 @@ printf '\033[1;%dr\033[%d;1H' $((ROWS - BH - 1)) $((BH + 2))
 
 a5-diag panel
 echo 4 > /proc/sys/kernel/printk
+stage_check 0
 stty -echo -icanon 2>/dev/null
 
 echo
@@ -78,8 +90,11 @@ echo " Galaxy A5 (2017) - mainline Linux M5e"
 echo "========================================="
 a5-diag info
 a5-diag system
+stage_check 1
 a5-diag usb
+stage_check 2
 a5-diag android
+stage_check 3
 
 # USB device controller: if the PHY/DWC3 failed to probe because a clock was
 # off, a5-diag usb has just turned it on; bind the drivers again.
@@ -92,6 +107,7 @@ fi
 UDC=$(ls /sys/class/udc 2>/dev/null)
 UDC=${UDC%%[[:space:]]*}
 echo " usb    : UDC = ${UDC:-NONE}"
+stage_check 4
 
 G=/sys/kernel/config/usb_gadget/a5
 if [ -n "$UDC" ]; then
@@ -123,6 +139,7 @@ if [ $? -eq 10 ] && [ -n "$UDC" ]; then
 fi
 sleep 2
 a5-diag usbregs
+stage_check 5
 
 # Nura (postmarketOS) on SYSTEM -> switch_root, in one of two modes:
 #   rw : only SYSTEM is writable (a5-diag lock-except), mounted read-write

@@ -1600,3 +1600,29 @@ loop worked (EVIDENCE 12), so a plain reset is not poison for every payload.
 
 **v7 (`ubreset7`)**: same as v6 but INFORM3 = 0 (plain), with the DRAM marker
 (second boot draws blue). Loops if it works.
+
+**v7 result (Jimmy, 2026-10-25): PLAIN reset from our U-Boot, no Linux, LOOPS.**
+The red band, the green stripe and the white stripe appeared fresh on every
+cycle (about one cycle per second, which is faster than I expected; Jimmy
+confirmed the bands, so it is our U-Boot running each time, not S-Boot looping
+alone). The Samsung logo showed between cycles; no hang. The marker did not
+turn the band blue, so S-Boot or the reset clears that DRAM/framebuffer word.
+
+**Conclusion so far.** A plain SWRESET (INFORM3 = 0) into our U-Boot image works
+every time when Linux has not run. The hang in EVIDENCE 27/28 needs Linux to
+have run before the reset. The reset mechanism, S-Boot's normal-boot path and
+our U-Boot image are not the cause by themselves. What Linux changes is open:
+hardware registers that survive SWRESET (PMIC/MUIC, eMMC card state, PMU
+scratch), DRAM contents, or the way Linux stops.
+
+**Bisect (this entry onward).** `mainline/rootfs/init` has `stage_check N`:
+with `a5.stage=N` on the kernel command line, init stops after step N and runs a
+plain `reboot -f`. Build with `STAGE=N MILESTONE=stageN ./build-mainline.sh`
+(adds `setenv bootargs "<DT bootargs> a5.stage=N"` to the boot script).
+Stages: 0 = kernel up + `a5-diag panel` only; 1 = after `a5-diag info/system`
+(eMMC read, lock); 2 = after `a5-diag usb` (USB PLL/PHY pokes); 3 = after
+`a5-diag android`; 4 = after the USB gadget bind; 5 = after muic + usbregs.
+Reading: loops every few seconds = this stage is fine; Samsung logo for a
+minute or more = the hang is at or before stage N. Start with 0: if it hangs,
+the kernel's own drivers are enough and userspace is innocent; if it loops, go
+to 2, then 4, then 5.
