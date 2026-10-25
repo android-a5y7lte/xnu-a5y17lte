@@ -1563,3 +1563,27 @@ uniLoader stays at 0x47000000), MMU/cache state, secure-monitor calls. Not
 tested.
 
 **v5 (`ubreset5`)**: stage stripes, then INFORM3 = recovery before SWRESET.
+
+**v5 result (Jimmy, 2026-10-25): red band, one green stripe, then frozen; no blue,
+no white stripes, no reboot; Samsung logo visible with the stripes. Forced off.**
+
+**Correction: v3, v4 and v5 told us nothing about reset, and my v5 guide was
+wrong.** The green stripe is drawn *after* the INFORM3 write, so it proves the
+PMU write works; "stripes up to green = INFORM3 write failed" was my error. What
+stops U-Boot after green is the next command, `sleep 3`. This U-Boot has no
+working timer: CNTFRQ_EL0 = 0 at EL1 (EVIDENCE 11), `CONFIG_ARMV8_CNTFRQ_BROKEN`
+is not set (`build/u-boot/.config:222`), and `get_tbclk()`
+(`arch/arm/cpu/armv8/generic_timer.c:19-28`) just returns the register. So the
+tick-to-time division gives 0, `get_timer()` never advances, and `sleep` loops
+forever (derived from the source, not observed). That fits every run: v3 (band +
+logo, static, sat in `sleep 8`), v4 (no stripes, `sleep 8`), v5 (hung in `sleep
+3`). The SWRESET write was never executed in any of them, and the Samsung logo
+stayed because no reset ever happened. The earlier "S-Boot never restarts us" and
+"MMU mapping problem" readings are both withdrawn.
+
+Side finding: U-Boot's `sleep`/`udelay` do not work on this board. Harmless
+while U-Boot only boots Linux; fix later with `CONFIG_ARMV8_CNTFRQ_BROKEN` and
+a rate from the DT.
+
+**v6 (`ubreset6`)** has no `sleep`: it waits by filling scratch DRAM, then
+INFORM3 = recovery and SWRESET as in v5.
