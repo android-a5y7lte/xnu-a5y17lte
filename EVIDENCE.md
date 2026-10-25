@@ -1545,3 +1545,21 @@ U-Boot again. Both look identical. Not concluded.
 **v4 (`ubreset4`)** separates them: green stripes every second for 10 s after the
 reset write (stripes = no reset), and a DRAM marker that turns the next boot's
 band blue (blue = S-Boot started our U-Boot again).
+
+**v4 result (Jimmy, 2026-10-25): red band, no green stripes, then frozen; no second
+boot and no logo return. Forced off.** The mapping in my table ("reset happens,
+S-Boot never restarts us, no Linux involved") is too strong. Established: U-Boot
+ran and the SWRESET write stopped U-Boot (no stripes). Not established: that
+the SoC reset. A frozen picture is also what a command-mode panel shows after a
+dead reset path, or after an abort in U-Boot's write. One detail does not match
+the Linux hangs: there the Samsung logo came back (S-Boot ran), here it did not.
+
+Contrast to keep in view: step 1b's uniLoader did a plain PMU SWRESET from EL1
+every 30 s and S-Boot started it again each time (EVIDENCE 12). So a plain
+SWRESET is not poison by itself; U-Boot and Linux both leave something
+different behind. Candidates: DRAM use (U-Boot relocates to the top of DRAM and
+`dram_init()` probes every 256 MB bank with `get_ram_size()`, which writes;
+uniLoader stays at 0x47000000), MMU/cache state, secure-monitor calls. Not
+tested.
+
+**v5 (`ubreset5`)**: stage stripes, then INFORM3 = recovery before SWRESET.
