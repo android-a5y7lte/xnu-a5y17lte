@@ -19,6 +19,9 @@
  *   a5-diag lock-except NAME
  *                   M5e: every eMMC block device read-only except the GPT
  *                   partition NAME, checked via each partition's "ro"
+ *   a5-diag reboot CMD
+ *                   reboot(RESTART2, CMD) for CMD = download, recovery or
+ *                   bootloader (busybox reboot cannot pass a command)
  *   a5-diag keys    PID 1 loop: print key presses, hold Power 3 s ->
  *                   reboot into recovery (TWRP), reap orphaned children
  *
@@ -494,6 +497,22 @@ static int cmd_keys(void)
  * W0 checks for Waydroid. Read-only towards the hardware: it only mounts
  * binderfs (a pseudo filesystem) and asks binderfs for one device.
  */
+static int cmd_reboot(const char *cmd)
+{
+	if (strcmp(cmd, "download") && strcmp(cmd, "recovery") &&
+	    strcmp(cmd, "bootloader")) {
+		fprintf(stderr, "reboot: CMD must be download, recovery or bootloader\n");
+		return 1;
+	}
+	printf("rebooting: RESTART2 \"%s\"\n", cmd);
+	fflush(stdout);
+	sync();
+	syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+		LINUX_REBOOT_CMD_RESTART2, cmd);
+	perror("reboot");
+	return 1;
+}
+
 static int cmd_android(void)
 {
 	struct drm_version v = { 0 };
@@ -766,9 +785,11 @@ int main(int argc, char **argv)
 		return cmd_held(atoi(argv[2]));
 	if (!strcmp(argv[1], "lock-except") && argc > 2)
 		return cmd_lock_except(argv[2]);
+	if (!strcmp(argv[1], "reboot") && argc > 2)
+		return cmd_reboot(argv[2]);
 	if (!strcmp(argv[1], "keys"))
 		return cmd_keys();
 usage:
-	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|held MS|lock-except NAME|keys\n");
+	fprintf(stderr, "usage: a5-diag panel|info|system|usb|muic|usbregs|android|held MS|lock-except NAME|reboot CMD|keys\n");
 	return 2;
 }

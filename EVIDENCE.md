@@ -1420,3 +1420,33 @@ U-Boot/Linux on a warm start: step 1b's uniLoader rebooted by PMU SWRESET every
 30 s and came back each time (EVIDENCE 12), and TWRP -> Reboot -> System boots
 our image, so a warm start of our payload can work; what is different after Linux
 has run is the hardware state it leaves behind.
+
+## 29. `reboot download` was a no-op: busybox `reboot` cannot pass a command (2026-10-25)
+
+**Observation (Jimmy).** In rescue mode `reboot download` did nothing: no
+reboot-mode notifier output in dmesg, and the phone stayed in rescue mode.
+
+**Reading of the sources.**
+- `mainline/init/init.c` has no reboot-mode notifier. It only calls
+  `reboot(RESTART2, "recovery")` (init.c:113-120). The notifier is the kernel's
+  `syscon-reboot-mode` from `mainline/dts/exynos7880.dtsi:197-203`:
+  bootloader = 0x1234567d, download = 0x12345671, recovery = 0x12345674, written
+  to INFORM3 (PMU+0x80c). Any other string, or NULL, writes nothing.
+- The busybox build (`upstream/userspace/busybox/.config`, 1.36.1 defconfig) has
+  `# CONFIG_FEATURE_CALL_TELINIT is not set`. Then `reboot` without `-f` does
+  `kill(1, SIGTERM)` and ignores its argument. PID 1 (init.c, a5-diag keys)
+  installs no signal handler, so nothing happens. This matches the no-op. I
+  recalled busybox's halt behaviour from memory and did not read its source.
+- Consequence: no busybox `reboot <cmd>` has ever passed a command. The
+  Nura `reboot recovery` hang in EVIDENCE 28 Test B may have been a plain
+  reboot. Not checked (Nura's reboot is not busybox).
+
+**Change.** `a5-diag reboot CMD` (CMD = download, recovery or bootloader) calls
+`reboot(RESTART2, CMD)` directly. Built as
+`out/a5y17lte-mainline-m5f-boot.img`, sha256 `de085b24…a60f24`. The tracked
+m5e image is unchanged. NOT yet run on the phone.
+
+**Planned test.** (1) `a5-diag reboot recovery` from rescue (control; the Power
+hold already reaches TWRP). (2) `a5-diag reboot download`: Odin screen means
+S-Boot download mode works; a hang at the logo means S-Boot or the hardware
+state after Linux, not the mode string.
