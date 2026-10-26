@@ -1827,3 +1827,10 @@ reset, or secure/S-Boot data); (2) the FIT parse and hash (reads only). Images
 same at 0x50000000, `ubmem3` = `iminfo` of the FIT (hashes, read only). Order: 1.
 Hang at 1: DRAM at 0x48000000 is off limits, then 2 shows whether it is only that
 region. Loop at 1: test 3 (hash) and then `bootm start` alone.
+
+**ubmem1 result (Jimmy, 2026-10-26): red, green, white bands, then the plain
+reset hung at the Samsung logo, no loop.** A 192-byte DRAM write at 0x48000000,
+with no `bootm` at all, is enough to make the next plain reset hang. This is the
+cause of the whole EVIDENCE 27-29 hang (the kernel's own first words land at
+0x48000000 too). Next: `ubmem2` (same write at 0x50000000) to see whether only
+that region is affected.
