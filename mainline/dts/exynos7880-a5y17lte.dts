@@ -117,6 +117,31 @@
 		#size-cells = <0>;
 	};
 
+	/*
+	 * Touchscreen bring-up (EVIDENCE 31), bit-banged until the CMU_PERI I2C
+	 * clocks are supported. [D] PMIC: S2MPU05 at 7-bit 0x66 on
+	 * hsi2c@10610000, gpm0-0 (SDA) / gpm0-1 (SCL), supplies the touch IC
+	 * through LDO34. [D] Touch: i2c@13890000, gpc2-0 (SDA) / gpc2-1 (SCL), IC at
+	 * 0x20 (Zinitix) or 0x48 (sec_ts) depending on the board revision.
+	 */
+	i2c_pmic: i2c-gpio-pmic {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpm0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpm0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	i2c_touch: i2c-gpio-touch {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpc2 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpc2 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
 	/* [D] memory@40000000 0x3E400000 and memory@80000000 0x80000000 (3 GB) */
 	memory@40000000 {
 		device_type = "memory";
