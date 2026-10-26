@@ -1862,3 +1862,14 @@ with Volume Down + Power, then Volume Up + Power into TWRP.
 the bad region lies within 0x48000000-0x48100000 (1 MiB). The recovery combo
 (Volume Up + Home + Power) at the logo left the loop cleanly into TWRP this time.
 Next: `ubmem7` (0x47fff000) for the lower edge.
+
+**ubmem7 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x47fff000 is fine, so
+the bad region starts at 0x48000000 or just above it, and ends before
+0x48100000.
+
+**Bisect inside 0x48000000-0x48100000** (`mainline/boot-mem{8..11}.cmd`): `ubmem8`
+192 B at 0x48001000, `ubmem9` 192 B at 0x48010000, `ubmem10` 192 B at
+0x48080000, `ubmem11` only 96 B (0x18 words) at 0x48000000 (is the bad part within
+the first half of the 192 bytes?). Order: 9 first. Loop at 9: the region is
+below 0x48010000 (then 8, then narrow); hang at 9: it extends past 64 KiB (then
+10).
