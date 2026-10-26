@@ -1813,3 +1813,17 @@ the plain reset hung at the Samsung logo, no loop.** The cause is in `bootm
 start`, `loados` or `ramdisk` (relocation); the DT step is not needed. Next:
 `ubprepC` (start + loados). Hang at C: FIT parse/hash or the kernel copy; loop at
 C: the ramdisk relocation.
+
+**ubprepC result (Jimmy, 2026-10-26): red, green, white bands, then the plain
+reset hung at the Samsung logo, no loop.** The cause is in `bootm start` or
+`loados` (FIT parse and hash, kernel copy to 0x48000000). `ramdisk` and `fdt` are
+not needed.
+
+**Next: what does `loados` touch?** Candidates: (1) the write to DRAM at
+0x48000000 (the FIT's load address; DRAM may hold something that survives a
+reset, or secure/S-Boot data); (2) the FIT parse and hash (reads only). Images
+(v7 reset test after one command, `mainline/boot-mem{1,2,3}.cmd`):
+`ubmem1` = `mw.l 0x48000000 ... 0x30` (192 bytes, like the stub), `ubmem2` = the
+same at 0x50000000, `ubmem3` = `iminfo` of the FIT (hashes, read only). Order: 1.
+Hang at 1: DRAM at 0x48000000 is off limits, then 2 shows whether it is only that
+region. Loop at 1: test 3 (hash) and then `bootm start` alone.
