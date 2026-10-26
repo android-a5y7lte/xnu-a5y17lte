@@ -1807,3 +1807,9 @@ C = `bootm start` + `loados` (FIT parse, hashes, kernel copy to 0x48000000);
 A = C + `ramdisk` (relocation); B = A + `fdt` (copy, fixups). Loop = fine up to
 there; hang = cause at or before. Order: A first. Hang at A: test C. Loop at A:
 test B. Build: `STUB=1 BOOTCMD=boot-prepX.cmd MILESTONE=ubprepX ./build-mainline.sh`.
+
+**ubprepA result (Jimmy, 2026-10-26): red, green and white bands appeared, then
+the plain reset hung at the Samsung logo, no loop.** The cause is in `bootm
+start`, `loados` or `ramdisk` (relocation); the DT step is not needed. Next:
+`ubprepC` (start + loados). Hang at C: FIT parse/hash or the kernel copy; loop at
+C: the ramdisk relocation.
