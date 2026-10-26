@@ -1794,3 +1794,16 @@ cache/MMU cleanup and the jump are not needed. Next: `ubrst1` (start of
 relocation). Hang at 1: the cause is in `bootm`'s preparation (memory written
 by the load/relocation, DT fixups). Loop at 1: the cause is in `bootm_final()`
 (`board_quiesce_devices`, `dm_remove_devices_active`).
+
+**ubrst1 result (Jimmy, 2026-10-26): stripe (higher up, as expected), black,
+then the plain reset hung at the Samsung logo, no loop.** The cause is in
+`bootm`'s preparation, before `boot_jump_linux()`: FIT load and hash, DT fixups
+or ramdisk relocation. (v7 never loaded or relocated anything.)
+
+**Bisect of the preparation, from the boot script** (`bootm` has sub-commands, so
+no U-Boot patch is needed): `mainline/boot-prep{C,A,B}.cmd` run part of `bootm`,
+then the v7 reset test (stripes, plain SWRESET), all with the stub FIT (STUB=1).
+C = `bootm start` + `loados` (FIT parse, hashes, kernel copy to 0x48000000);
+A = C + `ramdisk` (relocation); B = A + `fdt` (copy, fixups). Loop = fine up to
+there; hang = cause at or before. Order: A first. Hang at A: test C. Loop at A:
+test B. Build: `STUB=1 BOOTCMD=boot-prepX.cmd MILESTONE=ubprepX ./build-mainline.sh`.
