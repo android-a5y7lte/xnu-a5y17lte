@@ -1,0 +1,12 @@
+[Unit]
+Description=NAT for the Galaxy A5 (2017) USB internet (172.16.42.0/24)
+After=docker.service network-online.target
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/a5y17lte-pc-nat
+
+[Install]
+WantedBy=multi-user.target

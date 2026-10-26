@@ -1970,3 +1970,15 @@ started, DNS and ping to dl-cdn.alpinelinux.org OK. PERSISTENCE PASSED.
 Remaining caveats: the PC's NAT rules are not persistent (PC side); a phone
 without the cable gets no time beyond swclock's last-shutdown time; the user "user"
 has a password (placeholder 147147), `sudo` asks for it, root login by SSH is off.
+
+**PC side persistent (2026-10-27, Jimmy OK'd).** `tools/install-pc-nat.sh` (sudo)
+installs `/usr/local/sbin/a5y17lte-pc-nat` (from `tools/pc-usbnet-nat.sh`:
+`ip_forward=1`, MASQUERADE for 172.16.42.0/24 to anywhere outside it, so any uplink
+works, and ACCEPTs for enx02a517000002 in DOCKER-USER, or FORWARD if Docker is not
+running; idempotent), `/etc/systemd/system/a5y17lte-nat.service` (oneshot, enabled,
+`After=docker.service`, `PartOf=docker.service` so a Docker restart re-applies it),
+and `/etc/sysctl.d/99-a5y17lte-forward.conf`. Checked: the manual rules deleted,
+the service recreated them, a restart adds no duplicates, the phone pings
+1.1.1.1 and resolves names. Not tested: an actual PC reboot (the service is
+enabled; check after the next one with `systemctl status a5y17lte-nat`). Undo: see
+the header of the install script.

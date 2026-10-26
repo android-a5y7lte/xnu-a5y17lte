@@ -81,8 +81,9 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
 - Route/DNS/clock PERSISTENT (EVIDENCE 30, 2026-10-27): package 3-r3 has the
   a5y17lte-usbnet service (default route via the PC on usb0), real nameservers
   in resolv.conf; swclock + chronyd set the clock once the network works. Applied
-  live on the phone and verified over `sudo reboot`; the PC's iptables NAT is
-  still redone by hand after a PC reboot. Log in as `user` (sudo password
+  live on the phone and verified over `sudo reboot`; the PC's NAT is now
+  a systemd service (tools/install-pc-nat.sh; a5y17lte-nat.service), untested over a
+  PC reboot. Log in as `user` (sudo password
   147147), root SSH is off; no scp (use `ssh ... 'cat > f'`).
 - NEXT (not started): touchscreen -> Phosh (roadmap below).
 
