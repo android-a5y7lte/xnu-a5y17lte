@@ -1857,3 +1857,8 @@ the bad region lies within 0x48000000-0x49000000. Next: `ubmem6` (0x48100000).
 How the loop was left: Download mode on purpose, then Volume Down (cancel); that
 reboot stuck on the plain Samsung logo (no bands, same kind of hang); forced off
 with Volume Down + Power, then Volume Up + Power into TWRP.
+
+**ubmem6 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48100000 is fine, so
+the bad region lies within 0x48000000-0x48100000 (1 MiB). The recovery combo
+(Volume Up + Home + Power) at the logo left the loop cleanly into TWRP this time.
+Next: `ubmem7` (0x47fff000) for the lower edge.
