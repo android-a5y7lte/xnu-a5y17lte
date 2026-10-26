@@ -1878,3 +1878,8 @@ below 0x48010000 (then 8, then narrow); hang at 9: it extends past 64 KiB (then
 no loop; forced off with Volume Down + Power). The write at 0x48010000 is bad, so
 the bad region reaches past 64 KiB; it ends before 0x48100000 (ubmem6 loops).
 Next: `ubmem10` (0x48080000).
+
+**ubmem10 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48080000 is fine, so
+the bad region ends between 0x48010000 and 0x48080000 (it starts at or just
+above 0x48000000; 0x47fff000 is fine). Probes: `ubmem12` 0x48040000 (midpoint),
+`ubmem13` 0x48020000, `ubmem14` 0x48060000. Order: 12 first.
