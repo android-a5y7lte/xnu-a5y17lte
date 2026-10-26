@@ -2055,3 +2055,28 @@ pmOS kernel package gets them at the next `build-pmos.sh`.
 trigger (EVIDENCE 11, 13), set once by `a5-diag panel`. Phosh/phoc need DRM/KMS
 (at least simpledrm) and a way to trigger the panel after every frame. See
 CLAUDE.md roadmap: the DECON/DSI display driver was planned after the CMU driver.
+
+## 32. Phosh on Nura (2026-10-27)
+
+**Correction to the plan: no "trigger helper" is needed.** The panel refreshes by
+itself in HW/TE continuous mode once `a5-diag panel` writes DECON 0x14830070 =
+0x10 at boot (EVIDENCE 13), and simpledrm + fbdev emulation leave that intact
+(EVIDENCE 20). `/dev/dri/card0` is simpledrm on the S-Boot framebuffer.
+
+**Install** (on the running Nura, apk over the PC's NAT): `phosh phoc squeekboard
+elogind greetd mesa-dri-gallium mesa-egl mesa-gles dbus-openrc polkit-elogind`
+(411 packages, SYSTEM 545 MB -> 1.3 GB used). NOT `postmarketos-ui-phosh`: it
+depends on `postmarketos-usb-moded`, which would take over the USB gadget (our
+SSH link). Problem met: `postmarketos-mkinitfs`'s apk trigger fails ("No kernel
+found in /boot", we boot from the FIT in the BOOT partition) and aborts the
+transaction; worked around by replacing `/usr/bin/mkinitfs` with a stub and
+`apk fix --no-scripts` (apk state clean afterwards). OPEN: the trigger fails again
+on any later apk transaction that touches /lib/firmware; needs a permanent fix in
+the device package.
+
+**Session**: `/usr/local/bin/a5-phosh-session` (phoc with `WLR_RENDERER=pixman`,
+GTK `GSK_RENDERER=cairo`, Mesa swrast) and `/etc/greetd/config.toml`
+(`initial_session` = autologin `user` on vt 1). `elogind` and `polkit` added to the
+default runlevel; `greetd` started by hand (not yet enabled at boot). After 25 s:
+`phoc`, `gnome-session`, `phosh`, `squeekboard` running, loginctl sessions for
+`user` active.
