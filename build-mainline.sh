@@ -60,6 +60,11 @@ KCONFIG_ALLCONFIG="$ML/config/a5y17lte.config" "${KM[@]}" allnoconfig >/dev/null
 "${KM[@]}" -j"$JOBS" Image exynos/exynos7880-a5y17lte.dtb headers usr_gen_init_cpio >/dev/null
 [ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply -R "$ML/debug/a5-rstlvl.patch"
 cp "$LINUX/arch/arm64/boot/Image" "$LINUX/arch/arm64/boot/dts/exynos/exynos7880-a5y17lte.dtb" "$B/fit/"
+# STUB=1: replace the kernel with a reset stub, to test U-Boot's hand-off (EVIDENCE 29)
+if [ -n "${STUB:-}" ]; then
+	clang --target=aarch64-linux-gnu -c "$ML/debug/rst-stub.S" -o "$B/rst-stub.o"
+	ld.lld -Ttext=0 --oformat=binary -o "$B/fit/Image" "$B/rst-stub.o"
+fi
 
 echo "== userspace (busybox, dropbear, a5-diag) + initramfs"
 [ -x "$ROOT/upstream/userspace/out/busybox" ] || "$ROOT/build-userspace.sh"

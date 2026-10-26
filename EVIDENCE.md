@@ -1754,3 +1754,17 @@ head.S / `start_kernel()` / `setup_arch()` up to `rest_init()`. Next: `rst11`
 (checkpoint right after `setup_arch()`). Hang at 11: cause is in head.S or
 `setup_arch()` (or what U-Boot leaves behind); loop at 11: cause is between
 `setup_arch()` and `kernel_init_freeable()`.
+
+**rst11 result (Jimmy, 2026-10-26): white stripe appeared (checkpoint 11, right
+after `setup_arch()`), then the plain reset hung at the Samsung logo, no loop.**
+The cause is at or before checkpoint 11.
+
+**Next: `rststub`, U-Boot's hand-off without any kernel.** v7 reset from the
+start of U-Boot, before `bootm`, so it never tested the state `bootm` leaves
+(device removal, cache/MMU cleanup, DT fixups). `rststub` (`STUB=1 MILESTONE=rststub
+./build-mainline.sh`) replaces the kernel Image in the FIT with a 192-byte arm64
+stub (`mainline/debug/rst-stub.S`): `bootm` runs unchanged and jumps to it; the
+stub draws a white stripe (row 600), triggers DECON, waits 2 s and writes PMU
+SWRESET (plain). Loops (stripe, logo, console, stripe, ...) = the hand-off is
+fine, the cause is in the kernel's early boot (head.S, `setup_arch()`). Hangs at
+the logo = `bootm`'s hand-off state is the cause; the kernel is innocent.
