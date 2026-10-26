@@ -1,4 +1,10 @@
-# Next phone test (prepared 2026-10-23 in the cloud session)
+# Next phone test (prepared 2026-10-23, images rebuilt 2026-10-26 after merging main)
+
+The three images now also contain Jimmy's main up to a714c3c (EVIDENCE 28/29):
+`a5-diag reboot recovery|download|bootloader`, banners without the penguin.
+Use `a5-diag reboot recovery` to get back to TWRP between tests (plain
+`reboot` still hangs, EVIDENCE 28). Check with `sha256sum -c out/<image>.sha256`:
+K9 `d18d12f4da2625e7…`, K2 `8072fd28fd437ad6…`, K6 `3adf84cd87d6e5c6…`.
 
 All images are in `out/` on branch **android-k6** (it contains K1, K8, K5a,
 K9 and K2; K5b, Panfrost, is on its own branch android-k5b and not built). Flash with TWRP -> Install -> Install Image -> Boot. None of them writes

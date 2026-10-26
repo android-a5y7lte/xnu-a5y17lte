@@ -1799,3 +1799,12 @@ Config: POWER_SUPPLY, BATTERY_S2MU005. init prints every power_supply
 present, emulator reaches the Linux entry. Expected: a "battery"-type supply
 with a plausible % (compare with TWRP's), ~3.7-4.35 V, current positive while
 charging.
+
+## K9/K2/K6 images rebuilt (2026-10-26)
+
+After merging main (a714c3c: EVIDENCE 28/29, `a5-diag reboot`, banner without
+the penguin) into android-k9 -> android-k2 -> android-k6, the three images were
+rebuilt: K9 sha256 `d18d12f4da2625e7…` (patches 0001-0007), K2 `8072fd28fd437ad6…` (0001-0009, the
+CMU_CCORE compatible checked in the kernel image), K6 `3adf84cd87d6e5c6…` (0001-0010). The
+hashes in the K9/K2/K6a sections above are the superseded first builds. Each
+image reaches the Linux entry in the U-Boot emulator.
