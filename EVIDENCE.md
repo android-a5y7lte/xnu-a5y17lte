@@ -1768,3 +1768,20 @@ stub draws a white stripe (row 600), triggers DECON, waits 2 s and writes PMU
 SWRESET (plain). Loops (stripe, logo, console, stripe, ...) = the hand-off is
 fine, the cause is in the kernel's early boot (head.S, `setup_arch()`). Hangs at
 the logo = `bootm`'s hand-off state is the cause; the kernel is innocent.
+
+**rststub result (Jimmy, 2026-10-26): white stripe appeared, then the plain reset
+hung at the Samsung logo, no loop.** With no Linux code at all, U-Boot's `bootm`
+hand-off followed by a plain SWRESET hangs, while a plain SWRESET from U-Boot
+before `bootm` loops (v7). So the cause is in what `bootm` does: the
+kernel is innocent (all the kernel checkpoints 8, 10, 11 hang for the same reason).
+
+**Bisect inside `bootm`** (`mainline/debug/a5-ubrst.patch`, debug only, applied for
+the build when `UBRST=N` is set, then reverted): `boot_jump_linux()` resets itself
+(stripe at row 130 + 70 * N, DECON trigger, 2 s counter wait, PMU SWRESET) at point
+N. 1 = start of `boot_jump_linux()` (everything before it is done: FIT load and
+hash, DT fixups, ramdisk relocation); 2 = after `bootm_final()` (device removal,
+`board_quiesce_devices`); 3 = after `cleanup_before_linux()` (interrupts, icache
+and dcache off, MMU off). Not covered by 1-3: PSCI/EL switch and the jump (the
+stub reached its stripe, so they work). Build: `UBRST=N MILESTONE=ubrstN
+./build-mainline.sh`. Loop = fine up to there; hang = the cause is at or before N.
+Order: 2 first (midpoint). Hang at 2: test 1; loop at 2: test 3.

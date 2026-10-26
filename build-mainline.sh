@@ -87,7 +87,10 @@ UM=(make -C "$UBOOT" O="$B/u-boot" HOSTCC=clang CROSS_COMPILE="$XP/aarch64-none-
 # test images (BOOTCMD set) need "dcache off" to flush framebuffer writes
 [ -z "${BOOTCMD:-}" ] || "$UBOOT/scripts/config" --file "$B/u-boot/.config" --enable CMD_CACHE
 "${UM[@]}" olddefconfig >/dev/null
-"${UM[@]}" -j"$JOBS" u-boot.bin tools >/dev/null
+# UBRST=N: debug patch, U-Boot resets itself at point N of bootm's hand-off (EVIDENCE 29)
+[ -z "${UBRST:-}" ] || git -C "$UBOOT" apply "$ML/debug/a5-ubrst.patch"
+"${UM[@]}" -j"$JOBS" ${UBRST:+KCFLAGS="-DA5_UBRST=$UBRST"} u-boot.bin tools >/dev/null
+[ -z "${UBRST:-}" ] || git -C "$UBOOT" apply -R "$ML/debug/a5-ubrst.patch"
 
 echo "== FIT payload"
 cp "$ML/a5y17lte.its" "$B/fit/"

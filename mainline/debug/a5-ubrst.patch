@@ -1,0 +1,52 @@
+diff --git a/arch/arm/lib/bootm.c b/arch/arm/lib/bootm.c
+index 9a115cc6..c9692693 100644
+--- a/arch/arm/lib/bootm.c
++++ b/arch/arm/lib/bootm.c
+@@ -254,6 +254,35 @@ static void switch_to_el1(void)
+ 
+ /* Subcommand: GO */
+ #ifdef CONFIG_ARM64
++
++/*
++ * a5y17lte reset bisect (EVIDENCE 29), debug only: with A5_UBRST=N (build
++ * option UBRST=N) boot_jump_linux() draws a white stripe (row 130 + 70 * N),
++ * triggers DECON, waits 2 s on the counter and writes PMU SWRESET at point N:
++ * 1 = start of boot_jump_linux(), 2 = after bootm_final(), 3 = after
++ * cleanup_before_linux().
++ */
++static void a5_ubrst(int n)
++{
++	u32 *fb = (u32 *)(0x67000000UL + (130 + 70 * n) * 4320UL);
++	u64 t, c;
++	int i;
++
++	if (n != A5_UBRST)
++		return;
++	for (i = 0; i < 40 * 1080; i++)
++		fb[i] = 0xffffffff;
++	*(volatile u32 *)0x14830070 = 0x10;
++	asm volatile("dsb sy");
++	asm volatile("mrs %0, cntvct_el0" : "=r"(t));
++	do {
++		asm volatile("mrs %0, cntvct_el0" : "=r"(c));
++	} while (c - t < 52000000UL);
++	*(volatile u32 *)0x106b0400 = 1;
++	for (;;)
++		asm volatile("wfi");
++}
++
+ static void boot_jump_linux(struct bootm_headers *images, int flag)
+ {
+ 	void (*kernel_entry)(void *fdt_addr, void *res0, void *res1,
+@@ -265,8 +294,11 @@ static void boot_jump_linux(struct bootm_headers *images, int flag)
+ 		(ulong) kernel_entry);
+ 	bootstage_mark(BOOTSTAGE_ID_RUN_OS);
+ 
++	a5_ubrst(1);
+ 	bootm_final(flag);
++	a5_ubrst(2);
+ 	cleanup_before_linux();
++	a5_ubrst(3);
+ 
+ 	if (!(flag & BOOTM_STATE_OS_FAKE_GO)) {
+ #ifdef CONFIG_ARMV8_PSCI
