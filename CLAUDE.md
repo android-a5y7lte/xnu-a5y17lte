@@ -78,8 +78,13 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   nameserver 1.1.1.1 bind-mounted over /etc/resolv.conf (systemd-resolved stub
   conflict), clock via `date -u -s` (no RTC). `apk update` OK, 37182 packages.
   M5e (all 5 steps) is COMPLETE.
-- NEXT (not started): make route/DNS/clock persistent in the device package;
-  then touchscreen -> Phosh (roadmap below).
+- Route/DNS/clock PERSISTENT (EVIDENCE 30, 2026-10-27): package 3-r3 has the
+  a5y17lte-usbnet service (default route via the PC on usb0), real nameservers
+  in resolv.conf; swclock + chronyd set the clock once the network works. Applied
+  live on the phone and verified over `sudo reboot`; the PC's iptables NAT is
+  still redone by hand after a PC reboot. Log in as `user` (sudo password
+  147147), root SSH is off; no scp (use `ssh ... 'cat > f'`).
+- NEXT (not started): touchscreen -> Phosh (roadmap below).
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)

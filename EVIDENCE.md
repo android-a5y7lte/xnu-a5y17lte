@@ -1953,3 +1953,20 @@ whenever usb0 is 172.16.42.1 and nothing else provides a default route (polls
 every 5 s, so a cable plugged in later works); post-install writes real
 nameservers (1.1.1.1, 9.9.9.9) when resolv.conf is the stub; `build-pmos.sh`
 repeats that on the image (post-install ordering trap, like hwclock).
+
+**Applied live and tested (2026-10-27, Jimmy OK'd).** On the running Nura rootfs
+(files only, via `sudo`): `/usr/bin/a5y17lte-usbnet`, `/etc/init.d/a5y17lte-usbnet`,
+`rc-update add a5y17lte-usbnet default`, `/etc/resolv.conf` with 1.1.1.1/9.9.9.9
+(the same files as package 3-r3; the rootfs image on the PC is still 3-r2 and
+gets them at the next `build-pmos.sh`). The PC's NAT rules from EVIDENCE 26 had
+been lost (PC side, runtime only) and were re-added (MASQUERADE 172.16.42.0/24 ->
+wlp2s0, DOCKER-USER ACCEPT for enx02a517000002).
+Result: the service added the default route by itself within 5 s; ping 1.1.1.1
+and name resolution worked; `chronyd` stepped the clock by 604069 s (the stale
+swclock date, 19 Oct) as soon as it could reach NTP. Then `sudo reboot` (clean
+restart, thanks to m5f): after boot, with no manual step, `default via
+172.16.42.2 dev usb0`, resolv.conf kept, clock right (swclock + chronyd), service
+started, DNS and ping to dl-cdn.alpinelinux.org OK. PERSISTENCE PASSED.
+Remaining caveats: the PC's NAT rules are not persistent (PC side); a phone
+without the cable gets no time beyond swclock's last-shutdown time; the user "user"
+has a password (placeholder 147147), `sudo` asks for it, root login by SSH is off.
