@@ -1895,3 +1895,20 @@ the bad region ends between 0x48010000 and 0x48020000. Probes: `ubmem15`
 **ubmem15 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48018000 is fine, so
 the bad region ends between 0x48010000 and 0x48018000 (0x48010000 itself is bad,
 ubmem9). Next: `ubmem16` (0x48014000).
+
+**ubmem16 result (Jimmy, 2026-10-26): HANG** (bands, then the plain logo; forced
+off). The write at 0x48014000 is bad, so the bad region ends between 0x48014000
+and 0x48018000. Known: bad at 0x48000000, 0x48010000, 0x48014000; fine at
+0x47fff000, 0x48018000, 0x48020000, 0x48040000, 0x48080000, 0x48100000,
+0x49000000, 0x4c000000, 0x50000000.
+
+**Don't pin the last 16 KiB; use the result.** Linux's memory node covers this
+region, so the kernel was writing there anyway (not only through the load
+address). Change (`reloc0`): a no-map reserved-memory entry
+`sboot-reset@48000000` (128 KiB, covers the bad region with margin) in the DT, and
+the FIT's kernel load/entry moved from 0x48000000 to 0x48200000 (the arm64 Image
+is relocatable at any 2 MiB-aligned address). `reloc0` = `STAGE=0` (kernel up +
+panel, then a plain `reboot -f`): if the DRAM theory is complete, it LOOPS (the
+first time a plain reset after Linux does). Hang = another bad region exists
+(e.g. in the initrd/FDT placement or in what Linux writes elsewhere); then bisect
+with the checkpoints again.

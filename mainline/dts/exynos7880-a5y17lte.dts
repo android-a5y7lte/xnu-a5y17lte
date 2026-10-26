@@ -135,6 +135,16 @@
 		#size-cells = <1>;
 		ranges;
 
+		/*
+		 * [H] A write here makes the next plain reset hang at the Samsung logo
+		 * (EVIDENCE 29: bad at 0x48000000 and 0x48010000/0x48014000, fine at
+		 * 0x47fff000 and 0x48018000; 128 KiB covers it). Not used for Linux.
+		 */
+		sboot-reset@48000000 {
+			reg = <0x0 0x48000000 0x20000>;
+			no-map;
+		};
+
 		/* [D] extra_info */
 		extra-info@45fff000 {
 			reg = <0x0 0x45fff000 0x1000>;
