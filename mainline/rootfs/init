@@ -27,59 +27,32 @@ mount -t debugfs debugfs /sys/kernel/debug
 hostname a5y17lte
 
 # Screen banners (EVIDENCE 27). The console is fbcon, 67x60 (TER16x32 on
-# 1080x1920). A banner is a pixel-art Tux (2 console cells per pixel, 12x10)
-# with the label beside it on one line, white on the banner colour; a lit
-# pixel is a space with a coloured background (the font has no block glyphs).
+# 1080x1920). A banner is BH rows tall with the label on one line at row 4,
+# white on the banner colour (a lit cell is a space with a coloured
+# background; the font has no block glyphs). The pixel-art Tux that used to
+# stand left of the label is gone; its 24 columns stay reserved so the label
+# keeps its place.
 # One copy is drawn at the top when init starts (it scrolls away with the
 # log), one is pinned at the bottom: the log scrolls in a region above it, and
 # the region is never reset, so it also stays through Nura's boot and login.
-# Green = kernel mode, red = rescue (label and penguin). Beak and feet are
-# yellow (the console's orange). Full-screen programs that reset the scroll
-# region can overwrite the pinned copy.
+# Green = kernel mode, red = rescue. Full-screen programs that reset the
+# scroll region can overwrite the pinned copy.
 COLS=67
 ROWS=$(stty size 2>/dev/null | cut -d' ' -f1)
 [ "${ROWS:-0}" -ge 40 ] 2>/dev/null || ROWS=60
 BH=10		# banner height in rows
-
-# Tux, 12 pixels wide: G body, B beak and feet, . empty (the eyes and the
-# belly are empty holes in the body)
-TUXW=24
-pixline() {	# pixel row, body background code -> 2 cells per pixel
-	local r=$1 body beak out= c
-	body=$(printf '\033[%sm  \033[0m' "$2")
-	beak=$(printf '\033[43m  \033[0m')
-	while [ -n "$r" ]; do
-		c=${r%"${r#?}"}; r=${r#?}
-		case $c in
-		G) out="$out$body";;
-		B) out="$out$beak";;
-		*) out="$out  ";;
-		esac
-	done
-	printf '%s' "$out"
-}
+TUXW=24		# columns once taken by the penguin
 
 draw_banner() {	# first row, colour (red|green), label; cursor and region kept
-	local row=$1 bg=42 word=$3 i=1 pl ban= x0
+	local row=$1 bg=42 word=$3 i=1 ban= x0
 	[ "$2" = red ] && bg=41
 	x0=$(( (COLS - TUXW - 3 - ${#word} - 2) / 2 ))
-	while read -r pl; do
-		ban="$ban$(printf '\033[%d;1H\033[2K\033[%d;%dH' $((row + i - 1)) \
-			$((row + i - 1)) $((x0 + 1)))$(pixline "$pl" $bg)"
-		[ $i -eq 4 ] && ban="$ban$(printf '   \033[1;37;%sm %s \033[0m' $bg "$word")"
+	while [ $i -le $BH ]; do
+		ban="$ban$(printf '\033[%d;1H\033[2K' $((row + i - 1)))"
+		[ $i -eq 4 ] && ban="$ban$(printf '\033[%d;%dH\033[1;37;%sm %s \033[0m' \
+			$((row + i - 1)) $((x0 + TUXW + 4)) $bg "$word")"
 		i=$((i + 1))
-	done <<'TUX'
-...GGGGGG...
-..GGGGGGGG..
-..GG.GG.GG..
-..GGGBBGGG..
-.GGGGGGGGGG.
-GGGG....GGGG
-GGG......GGG
-.GGG....GGG.
-..GGG..GGG..
-.BBBB..BBBB.
-TUX
+	done
 	printf '\0337%s\0338' "$ban"
 }
 
