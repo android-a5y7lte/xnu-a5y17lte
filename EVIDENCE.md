@@ -1891,3 +1891,7 @@ the bad region ends between 0x48010000 and 0x48040000. Next: `ubmem13`
 **ubmem13 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48020000 is fine, so
 the bad region ends between 0x48010000 and 0x48020000. Probes: `ubmem15`
 0x48018000 (midpoint), `ubmem16` 0x48014000, `ubmem17` 0x4801c000. Order: 15 first.
+
+**ubmem15 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48018000 is fine, so
+the bad region ends between 0x48010000 and 0x48018000 (0x48010000 itself is bad,
+ubmem9). Next: `ubmem16` (0x48014000).
