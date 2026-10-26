@@ -5,6 +5,7 @@
 # The kernel package gets the same patches, device tree and .config as the
 # FIT that build-mainline.sh puts on the BOOT partition.
 # pmbootstrap needs sudo (chroots); everything stays in build/pmbootstrap.
+# Phosh (greetd autologin, software rendering, scale 2) comes from the device package.
 # Output: build/pmos/samsung-a5y17lte-root.img (ext4) + .sha256
 # Env: A5_PMOS_PASSWORD (default 147147, change it with passwd on the phone;
 #      ~/.ssh/*.pub are installed for SSH key login either way)
@@ -53,7 +54,7 @@ work = $W
 device = samsung-a5y17lte
 ui = console
 service_manager = openrc
-extra_packages = doas
+extra_packages = doas,i2c-tools,libgpiod,evtest
 user = user
 hostname = a5y17lte
 ssh_keys = True
@@ -110,6 +111,34 @@ EOF
 fi
 debugfs -R "cat /etc/resolv.conf" "$O/samsung-a5y17lte-root.img" 2>/dev/null
 debugfs -R "ls /etc/runlevels/default" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep usbnet || echo "WARNING: a5y17lte-usbnet not in the default runlevel"
+# Phosh (EVIDENCE 32): the device package's post-install enables elogind, polkit and
+# greetd and drops the tty1 getty, but postmarketos-base's can run after it (same
+# ordering trap as hwclock/resolv.conf): check the image, fix what is missing
+IMG="$O/samsung-a5y17lte-root.img"
+for svc in elogind polkit greetd a5y17lte-usbnet; do
+	if ! debugfs -R "stat /etc/runlevels/default/$svc" "$IMG" >/dev/null 2>&1; then
+		echo "runlevel default lacks $svc: adding"
+		debugfs -w -R "symlink /etc/runlevels/default/$svc /etc/init.d/$svc" "$IMG" >/dev/null 2>&1
+	fi
+done
+if debugfs -R "cat /etc/inittab" "$IMG" 2>/dev/null | grep -q '^tty1::respawn:'; then
+	echo "inittab still has the tty1 getty: commenting it out"
+	F="$(mktemp)"
+	debugfs -R "cat /etc/inittab" "$IMG" 2>/dev/null | sed 's|^\(tty1::respawn:\)|#a5y17lte (greetd owns tty1) \1|' > "$F"
+	debugfs -w -f - "$IMG" >/dev/null 2>&1 <<EOF
+rm /etc/inittab
+write $F /etc/inittab
+sif /etc/inittab uid 0
+sif /etc/inittab gid 0
+sif /etc/inittab mode 0100644
+EOF
+	rm -f "$F"
+fi
+for f in /etc/greetd/config.toml /etc/phosh/phoc.ini /usr/bin/a5-phosh-session; do
+	debugfs -R "stat $f" "$IMG" >/dev/null 2>&1 || echo "WARNING: $f missing from the image"
+done
+debugfs -R "ls /etc/runlevels/default" "$IMG" 2>/dev/null | tr -s ' ' '\n' | grep -E 'elogind|polkit|greetd|usbnet|dbus' | tr '\n' ' '; echo
+debugfs -R "cat /etc/inittab" "$IMG" 2>/dev/null | grep tty1
 debugfs -R "ls /etc/runlevels/boot" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep -E 'clock' || true
 debugfs -R "cat /etc/fstab" "$O/samsung-a5y17lte-root.img" 2>/dev/null
 e2fsck -fn "$O/samsung-a5y17lte-root.img" | tail -1

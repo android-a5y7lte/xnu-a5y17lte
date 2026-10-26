@@ -10,4 +10,11 @@ rc-update -q add a5y17lte-usbnet default
 if grep -q '^nameserver 127\.0\.0\.53' /etc/resolv.conf 2>/dev/null; then
 	printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' > /etc/resolv.conf
 fi
+# Phosh (EVIDENCE 32): greetd logs "user" into it on tty1, so the tty1 getty goes
+rc-update -q add elogind default
+rc-update -q add polkit default
+rc-update -q add greetd default
+if [ -f /etc/inittab ]; then
+	sed -i 's|^\(tty1::respawn:\)|#a5y17lte (greetd owns tty1) \1|' /etc/inittab
+fi
 exit 0

@@ -3,7 +3,7 @@
 vt = 1
 
 [initial_session]
-command = "/usr/local/bin/a5-phosh-session"
+command = "/usr/bin/a5-phosh-session"
 user = "user"
 
 [default_session]
