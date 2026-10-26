@@ -116,7 +116,7 @@ debugfs -R "ls /etc/runlevels/default" "$O/samsung-a5y17lte-root.img" 2>/dev/nul
 # ordering trap as hwclock/resolv.conf): check the image, fix what is missing
 IMG="$O/samsung-a5y17lte-root.img"
 for svc in elogind polkit greetd a5y17lte-usbnet; do
-	if ! debugfs -R "stat /etc/runlevels/default/$svc" "$IMG" >/dev/null 2>&1; then
+	if ! debugfs -R "stat /etc/runlevels/default/$svc" "$IMG" 2>&1 | grep -q "Inode:"; then
 		echo "runlevel default lacks $svc: adding"
 		debugfs -w -R "symlink /etc/runlevels/default/$svc /etc/init.d/$svc" "$IMG" >/dev/null 2>&1
 	fi
@@ -135,7 +135,7 @@ EOF
 	rm -f "$F"
 fi
 for f in /etc/greetd/config.toml /etc/phosh/phoc.ini /usr/bin/a5-phosh-session; do
-	debugfs -R "stat $f" "$IMG" >/dev/null 2>&1 || echo "WARNING: $f missing from the image"
+	debugfs -R "stat $f" "$IMG" 2>&1 | grep -q "Inode:" || echo "WARNING: $f missing from the image"
 done
 debugfs -R "ls /etc/runlevels/default" "$IMG" 2>/dev/null | tr -s ' ' '\n' | grep -E 'elogind|polkit|greetd|usbnet|dbus' | tr '\n' ' '; echo
 debugfs -R "cat /etc/inittab" "$IMG" 2>/dev/null | grep tty1

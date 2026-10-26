@@ -2101,3 +2101,20 @@ Session fixes made on the way: `/etc/inittab` tty1 getty commented out (backup
 `/etc/inittab.orig-a5`; greetd owns tty1), `agreety` installed, `greetd` added to the
 default runlevel, greetd's `initial_session` only runs once per boot
 (`/run/greetd.run`), Phosh passcode = the `user` password (147147).
+
+## 33. Rootfs rebuilt with Phosh and persistence (2026-10-27)
+
+`./build-pmos.sh` with device package 3-r4 (Phosh session, greetd, phoc scale 2,
+elogind/polkit/greetd/usbnet services, `replaces=greetd-agreety-config` for
+/etc/greetd/config.toml; extra_packages: doas, i2c-tools, libgpiod, evtest).
+First attempt failed with "trying to overwrite etc/greetd/config.toml owned by
+greetd-agreety-config" (fixed by `replaces`). The image checks in `build-pmos.sh`
+had a bug (`debugfs stat` exits 0 for missing files); fixed, and it then
+added the missing polkit runlevel link. Result:
+`build/pmos/samsung-a5y17lte-root.img`, 1483735040 B, sha256 `fee7ccdb…4d52`,
+e2fsck clean (pmOS_root, 18290 files). Contents verified with debugfs: runlevel
+default has a5y17lte-usbnet greetd elogind dbus polkit; tty1 getty commented out in
+inittab; resolv.conf 1.1.1.1/9.9.9.9; /usr/bin/a5-phosh-session, /etc/phosh/phoc.ini,
+/etc/greetd/config.toml (autologin `user`), phoc, phosh, squeekboard, swrast
+Mesa, agreety, evtest, i2c-tools. (The `mkinitfs` apk trigger issue on a
+running phone is still open.)
