@@ -1851,3 +1851,9 @@ starts exactly at 0x48000000.
 **ubmem4 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x4c000000 is fine, so
 the bad region's upper edge is between 0x48000000 and 0x4c000000. Next: `ubmem5`
 (0x49000000).
+
+**ubmem5 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x49000000 is fine, so
+the bad region lies within 0x48000000-0x49000000. Next: `ubmem6` (0x48100000).
+How the loop was left: Download mode on purpose, then Volume Down (cancel); that
+reboot stuck on the plain Samsung logo (no bands, same kind of hang); forced off
+with Volume Down + Power, then Volume Up + Power into TWRP.
