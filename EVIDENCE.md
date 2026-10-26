@@ -1873,3 +1873,8 @@ the bad region starts at 0x48000000 or just above it, and ends before
 the first half of the 192 bytes?). Order: 9 first. Loop at 9: the region is
 below 0x48010000 (then 8, then narrow); hang at 9: it extends past 64 KiB (then
 10).
+
+**ubmem9 result (Jimmy, 2026-10-26): HANG** (bands, then the plain Samsung logo,
+no loop; forced off with Volume Down + Power). The write at 0x48010000 is bad, so
+the bad region reaches past 64 KiB; it ends before 0x48100000 (ubmem6 loops).
+Next: `ubmem10` (0x48080000).
