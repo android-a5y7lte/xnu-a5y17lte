@@ -1834,3 +1834,16 @@ with no `bootm` at all, is enough to make the next plain reset hang. This is the
 cause of the whole EVIDENCE 27-29 hang (the kernel's own first words land at
 0x48000000 too). Next: `ubmem2` (same write at 0x50000000) to see whether only
 that region is affected.
+
+**ubmem2 result (Jimmy, 2026-10-26): LOOPS (red, green, white bands repeating,
+no hang).** The same 192-byte write at 0x50000000 is harmless; the one at
+0x48000000 is not. Side note: with the loop running, Volume Down + Power did not
+power the phone off (it did on the hanging images) and the loop just carried on;
+a loop can only be left through the recovery key combo at the logo (or by
+flashing from another way).
+
+**Mapping the edges** (same test, other addresses; `mainline/boot-mem{4..7}.cmd`):
+`ubmem4` 0x4c000000, `ubmem5` 0x49000000, `ubmem6` 0x48100000, `ubmem7`
+0x47fff000 (just below the known-bad address). Known: 0x48000000 bad, 0x50000000
+ok. Order: 4 first, then bisect the bracket with 5/6; 7 shows whether the region
+starts exactly at 0x48000000.
