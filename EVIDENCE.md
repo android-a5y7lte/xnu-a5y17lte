@@ -1785,3 +1785,12 @@ and dcache off, MMU off). Not covered by 1-3: PSCI/EL switch and the jump (the
 stub reached its stripe, so they work). Build: `UBRST=N MILESTONE=ubrstN
 ./build-mainline.sh`. Loop = fine up to there; hang = the cause is at or before N.
 Order: 2 first (midpoint). Hang at 2: test 1; loop at 2: test 3.
+
+**ubrst2 result (Jimmy, 2026-10-26): stripe appeared (higher on screen, as
+expected for row 270), the screen went briefly black, then the plain reset hung
+at the Samsung logo, no loop.** The cause is at or before `bootm_final()`: the
+cache/MMU cleanup and the jump are not needed. Next: `ubrst1` (start of
+`boot_jump_linux()`, i.e. after FIT load, hash, DT fixups and ramdisk
+relocation). Hang at 1: the cause is in `bootm`'s preparation (memory written
+by the load/relocation, DT fixups). Loop at 1: the cause is in `bootm_final()`
+(`board_quiesce_devices`, `dm_remove_devices_active`).
