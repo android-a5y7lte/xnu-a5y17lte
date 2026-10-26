@@ -1883,3 +1883,7 @@ Next: `ubmem10` (0x48080000).
 the bad region ends between 0x48010000 and 0x48080000 (it starts at or just
 above 0x48000000; 0x47fff000 is fine). Probes: `ubmem12` 0x48040000 (midpoint),
 `ubmem13` 0x48020000, `ubmem14` 0x48060000. Order: 12 first.
+
+**ubmem12 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x48040000 is fine, so
+the bad region ends between 0x48010000 and 0x48040000. Next: `ubmem13`
+(0x48020000).
