@@ -1847,3 +1847,7 @@ flashing from another way).
 0x47fff000 (just below the known-bad address). Known: 0x48000000 bad, 0x50000000
 ok. Order: 4 first, then bisect the bracket with 5/6; 7 shows whether the region
 starts exactly at 0x48000000.
+
+**ubmem4 result (Jimmy, 2026-10-26): LOOPS.** The write at 0x4c000000 is fine, so
+the bad region's upper edge is between 0x48000000 and 0x4c000000. Next: `ubmem5`
+(0x49000000).
