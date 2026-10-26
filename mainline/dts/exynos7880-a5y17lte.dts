@@ -150,7 +150,7 @@
 			compatible = "zinitix,bt538";
 			reg = <0x20>;
 			interrupt-parent = <&gpa0>;
-			interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+			interrupts = <5 IRQ_TYPE_LEVEL_LOW>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&touch_irq>;
 			vdd-supply = <&tsp_avdd>;

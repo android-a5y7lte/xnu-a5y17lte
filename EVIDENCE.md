@@ -2080,3 +2080,24 @@ GTK `GSK_RENDERER=cairo`, Mesa swrast) and `/etc/greetd/config.toml`
 default runlevel; `greetd` started by hand (not yet enabled at boot). After 25 s:
 `phoc`, `gnome-session`, `phosh`, `squeekboard` running, loginctl sessions for
 `user` active.
+
+**Touch under Phosh: diagnosis (2026-10-27).** With Phosh running the touchscreen
+was dead from the start, though `evtest` without Phosh worked. Findings:
+- The touch driver powers the IC off when nobody has the input node open
+  (`tsp_avdd` disabled, 0 users): normal. Under Phosh the node is open.
+- Dead state = the IC holds INT (gpa0-5) LOW with an unread event pending
+  (status register 0x80 = e.g. `0x09 0x00 0x00 0x00 <x> <y>`) and the driver's
+  falling-EDGE interrupt never fires again (IRQ count frozen, line low). Writing the
+  clear command by hand (`i2ctransfer -f -y 2 w2@0x20 0x03 0x00`) released the line
+  and zeroed the status at once. After a fresh driver start touches worked for
+  a while (Jimmy swiped, typed the passcode, reached the launcher) and then
+  stopped again; the dead state showed exactly that stuck status. So an event arrives
+  while INT is already low (or the clear command races a new event), no new falling
+  edge, driver stuck.
+- Fix: level-triggered interrupt (`IRQ_TYPE_LEVEL_LOW`; the driver requests a
+  threaded `IRQF_ONESHOT` handler, so it is re-run until the IC releases INT).
+  Image `m6c` (DT only, commit follows).
+Session fixes made on the way: `/etc/inittab` tty1 getty commented out (backup
+`/etc/inittab.orig-a5`; greetd owns tty1), `agreety` installed, `greetd` added to the
+default runlevel, greetd's `initial_session` only runs once per boot
+(`/run/greetd.run`), Phosh passcode = the `user` password (147147).
