@@ -85,7 +85,15 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   a systemd service (tools/install-pc-nat.sh; a5y17lte-nat.service), untested over a
   PC reboot. Log in as `user` (sudo password
   147147), root SSH is off; no scp (use `ssh ... 'cat > f'`).
-- NEXT (not started): touchscreen -> Phosh (roadmap below).
+- M6 PASSED (EVIDENCE 31): touchscreen works on m6b (out/a5y17lte-mainline-m6b-boot.img,
+  commit 867fa24): Zinitix ZT7538 as zinitix,bt538 at 0x20 on a bit-banged i2c-gpio
+  bus (gpc2-0/1), supply tsp_avdd = gpd1-4, IRQ gpa0-5, /dev/input/event0, 2-finger
+  multitouch checked with evtest. Also found: PMIC S2MPU05 at 0x66 on i2c-gpio
+  gpm0-0/1 (not used by the touch IC on this board). Tools on the phone: i2c-tools,
+  libgpiod, evtest (apk).
+- NEXT (not started): Phosh needs a display first (DRM + a DECON trigger for the
+  command-mode panel); decide the order: simpledrm + trigger helper, or the real
+  DECON/DSI driver.
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)

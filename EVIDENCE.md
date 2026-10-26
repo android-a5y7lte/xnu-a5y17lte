@@ -2036,3 +2036,22 @@ gate_pinctrl clock was left on by S-Boot).
   reads) is the real test. Tools used: `i2c-tools`, `libgpiod` (installed on the phone
   with apk). Next: `m6b` = Zinitix node (bt538, 1080x1920, IRQ gpa0-5), tsp_avdd
   regulator-fixed on gpd1-4, kernel config TOUCHSCREEN_ZINITIX.
+
+**m6b result (Jimmy, 2026-10-27): TOUCHSCREEN WORKS.** `Zinitix-TS 2-0020` probed on
+the first try (the only message: "supply vcca not found, using dummy regulator",
+harmless); input device "Zinitix Capacitive TouchScreen" on /dev/input/event0
+(1080x1920, 5 slots, BTN_TOUCH + multitouch), IRQ `bt538` on gpa0-5. The odd
+register readback seen with `i2ctransfer` did not matter: the driver's own init
+works. Jimmy tapped, dragged and used two fingers for 30 s; `evtest` captured
+3751 lines: 630 ABS_MT_POSITION_X events, X 52-1030 and Y 30-1599 (the bottom
+strip was not touched, the physical home key lives there), BTN_TOUCH down/up pairs,
+tracking ids counting up, and MT slots 0 (72 events) and 1 (73): real two-finger
+multitouch. The DT node, `tsp_avdd` (gpd1-4) and `CONFIG_TOUCHSCREEN_ZINITIX=y` are
+in the tree and in `out/a5y17lte-mainline-m6b-boot.img` (commit 867fa24); the
+pmOS kernel package gets them at the next `build-pmos.sh`.
+
+**What Phosh still needs.** A display. Today the screen is S-Boot's framebuffer
+(`simple-framebuffer`) on a command-mode panel that only updates after a DECON
+trigger (EVIDENCE 11, 13), set once by `a5-diag panel`. Phosh/phoc need DRM/KMS
+(at least simpledrm) and a way to trigger the panel after every frame. See
+CLAUDE.md roadmap: the DECON/DSI display driver was planned after the CMU driver.
