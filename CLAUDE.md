@@ -91,9 +91,17 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   multitouch checked with evtest. Also found: PMIC S2MPU05 at 0x66 on i2c-gpio
   gpm0-0/1 (not used by the touch IC on this board). Tools on the phone: i2c-tools,
   libgpiod, evtest (apk).
-- NEXT (not started): Phosh needs a display first (DRM + a DECON trigger for the
-  command-mode panel); decide the order: simpledrm + trigger helper, or the real
-  DECON/DSI driver.
+- M7 PASSED (EVIDENCE 32): Phosh 0.58 runs on Nura (m6c boot image, commit b6d5acd):
+  greetd autologin of `user`, phoc pixman/software rendering on simpledrm, touch
+  stable (touch IRQ must be level-triggered), scale 2 in /etc/phosh/phoc.ini,
+  passcode = `user` password (147147). No trigger helper was needed (the panel
+  refreshes by itself in HW TE mode). The phone's session files are copied to
+  pmos/device-samsung-a5y17lte/phosh/ but NOT yet in the device package or
+  build-pmos.sh; the phone's rootfs is now ahead of the one build-pmos.sh builds.
+- NEXT: (1) package the Phosh session + persistence in the device package and
+  rebuild/verify the rootfs; (2) fix the mkinitfs trigger; (3) back/menu keys
+  (Abov MCU) and Home key; (4) then the real DECON/DSI driver (roadmap, with the
+  CMU clock driver), GPU, battery, audio, Wi-Fi.
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)

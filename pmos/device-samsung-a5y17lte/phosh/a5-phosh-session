@@ -1,0 +1,9 @@
+#!/bin/sh
+# Galaxy A5 (2017): Phosh on simpledrm without a GPU driver (EVIDENCE 32).
+# phoc renders with pixman, GTK clients with cairo (both software).
+export WLR_RENDERER=pixman
+export WLR_RENDERER_ALLOW_SOFTWARE=1
+export GSK_RENDERER=cairo
+export MESA_LOADER_DRIVER_OVERRIDE=swrast
+export LIBGL_ALWAYS_SOFTWARE=1
+exec phosh-session

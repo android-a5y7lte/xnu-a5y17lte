@@ -1,0 +1,11 @@
+# Galaxy A5 (2017): log "user" straight into Phosh on the framebuffer console (vt 1)
+[terminal]
+vt = 1
+
+[initial_session]
+command = "/usr/local/bin/a5-phosh-session"
+user = "user"
+
+[default_session]
+command = "agreety --cmd /bin/sh"
+user = "greetd"
