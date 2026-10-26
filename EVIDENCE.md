@@ -1356,6 +1356,119 @@ Checked with busybox under qemu: `sh -n` and the screen emulator (widest
 column 53 of 67). Image `out/a5y17lte-mainline-m5e-boot.img`, sha256 `4b6fe1b0fef7061a852aca6d692d62f12ad0a3684008cb2ad04bc7197fa55116`
 (14626832 B), built at commit 55ed892, replacing `996ed364…`.
 
+## 28. Reboot hang: INFORM breadcrumb test, and `reboot recovery` also hangs (2026-10-22/23)
+
+**Test A: breadcrumb through the rescue-mode Power hold.** In rescue mode
+`pmu-poke` wrote PMU+0x81c = 0xdeadbeef. Then Power was held 3 s. That is not a
+hardware reset: `mainline/init/init.c:113-120` (and `a5-diag.c:466-471`) call
+`reboot(LINUX_REBOOT_CMD_RESTART2, "recovery")`, so it goes through
+reboot-mode (INFORM3 = 0x12345674) and syscon-reboot (PMU+0x400). **It worked
+and the phone reached TWRP** (the same result as in EVIDENCE 27). TWRP has no
+/dev/mem node, so the registers could only be read after TWRP -> Reboot ->
+System into Nura:
+
+| Register | Value after TWRP and a boot to Nura |
+|---|---|
+| PMU+0x81c (breadcrumb) | 0x00000000 (written 0xdeadbeef: **did not survive**) |
+| PMU+0x404 | 0x20000000 (same as EVIDENCE 27) |
+| INFORM2 (0x808) | 0x12345678 (Samsung's sec_reboot() marker, not written by us; same as EVIDENCE 27) |
+| INFORM3 (0x80c) | 0x00000000 |
+
+Two resets (rescue -> TWRP, TWRP -> Nura) and two Samsung-side stages (S-Boot,
+TWRP) sit between the write and the read, so the cleared breadcrumb does not say
+which of them cleared it. Not informative about the hang.
+
+**Test B: `sudo reboot recovery` inside Nura.** Same syscall as the Power hold in
+Test A. **It hung at the Samsung logo**, like plain `reboot`; forced power-off
+needed.
+
+**Reading.** The reset path is the same in A and B (RESTART2 "recovery" ->
+reboot-mode -> syscon-reboot), and A works while B hangs. So this does not
+contradict EVIDENCE 27: that entry only showed that the path works from the
+rescue init, and never that a named command works from Nura. What differs is
+the state of the system at reset time (Nura: OpenRC, rw ext4 on mmcblk0p19, more
+drivers bound, other shutdown callbacks), not the reset mechanism or the
+reboot-mode value. The INFORM3 theory is now close to excluded: the value
+0x12345674 is written in A and B alike. The breadcrumb test cannot decide it
+further.
+
+**Untested from EVIDENCE 27's open list:** (1) plain `reboot -f` from rescue;
+(2) `mount -o remount,ro /` + `reboot -f` in Nura.
+
+**Addendum (2026-10-23): plain `reboot -f` from rescue mode also hangs.** Samsung
+logo for about 5 minutes, forced off with Volume Down + Power 10 s. (EVIDENCE 27
+lists this test as not run; Jimmy says an earlier session had already seen it,
+but it is recorded here as a run result.) Matrix so far:
+
+| Where | Command | Result |
+|---|---|---|
+| rescue | `reboot(RESTART2, "recovery")` (Power hold) | works, TWRP |
+| rescue | plain / `-f` (cmd NULL, INFORM3 untouched) | hangs |
+| Nura | plain `reboot` | hangs |
+| Nura | `reboot recovery` | hangs |
+
+So the environment is not the only variable: a named command works in rescue
+and a plain reboot does not. The earlier statement "INFORM3 theory close to
+excluded" is withdrawn; it only held for the recovery case. Nura + recovery
+hanging is still unexplained by that alone.
+
+**Addendum 2 (2026-10-23): INFORM3 = 0x12345670 written from rescue, then `reboot -f`: still hangs at the Samsung logo.**
+Forced off. The INFORM3-marker theory is disproven for the plain reboot. Only
+RESTART2 "recovery" from rescue has been seen to work (INFORM3 = 0x12345674, and
+S-Boot then boots TWRP). Not yet known whether the hang is in S-Boot or in our
+U-Boot/Linux on a warm start: step 1b's uniLoader rebooted by PMU SWRESET every
+30 s and came back each time (EVIDENCE 12), and TWRP -> Reboot -> System boots
+our image, so a warm start of our payload can work; what is different after Linux
+has run is the hardware state it leaves behind.
+
+## 29. `reboot download` was a no-op: busybox `reboot` cannot pass a command (2026-10-25)
+
+**Observation (Jimmy).** In rescue mode `reboot download` did nothing: no
+reboot-mode notifier output in dmesg, and the phone stayed in rescue mode.
+
+**Reading of the sources.**
+- `mainline/init/init.c` has no reboot-mode notifier. It only calls
+  `reboot(RESTART2, "recovery")` (init.c:113-120). The notifier is the kernel's
+  `syscon-reboot-mode` from `mainline/dts/exynos7880.dtsi:197-203`:
+  bootloader = 0x1234567d, download = 0x12345671, recovery = 0x12345674, written
+  to INFORM3 (PMU+0x80c). Any other string, or NULL, writes nothing.
+- The busybox build (`upstream/userspace/busybox/.config`, 1.36.1 defconfig) has
+  `# CONFIG_FEATURE_CALL_TELINIT is not set`. Then `reboot` without `-f` does
+  `kill(1, SIGTERM)` and ignores its argument. PID 1 (init.c, a5-diag keys)
+  installs no signal handler, so nothing happens. This matches the no-op. I
+  recalled busybox's halt behaviour from memory and did not read its source.
+- Consequence: no busybox `reboot <cmd>` has ever passed a command. The
+  Nura `reboot recovery` hang in EVIDENCE 28 Test B may have been a plain
+  reboot. Not checked (Nura's reboot is not busybox).
+
+**Change.** `a5-diag reboot CMD` (CMD = download, recovery or bootloader) calls
+`reboot(RESTART2, CMD)` directly. Built as
+`out/a5y17lte-mainline-m5f-boot.img`, sha256 `de085b24…a60f24`. The tracked
+m5e image is unchanged. NOT yet run on the phone.
+
+**Planned test.** (1) `a5-diag reboot recovery` from rescue (control; the Power
+hold already reaches TWRP). (2) `a5-diag reboot download`: Odin screen means
+S-Boot download mode works; a hang at the logo means S-Boot or the hardware
+state after Linux, not the mode string.
+
+**Result (Jimmy, 2026-10-25): `a5-diag reboot download` PASSED.** From rescue mode on
+`m5f`, the phone went to S-Boot's real Odin screen ("Downloading... Do not turn
+off target", teal background, download icon). So RESTART2 "download" ->
+reboot-mode (INFORM3 = 0x12345671) -> syscon-reboot (PMU+0x400) works, and
+S-Boot runs normally after our Linux has run.
+
+Photo: `evidence/hw-mainline-m5f-odin-download-2026-10-25.jpg` (the Odin download screen).
+
+**Reading.** A warm reset after our Linux is not a general hardware or S-Boot
+failure: S-Boot starts and acts on INFORM3 (download here, recovery -> TWRP in
+EVIDENCE 27/28). The hang (plain reboot, `reboot -f`, INFORM3 = 0x12345670 in
+EVIDENCE 28) is on the path where S-Boot boots our own boot.img (our U-Boot and
+Linux), after Linux has run. TWRP -> Reboot -> System starts the same image
+fine, so what matters is the hardware state our Linux leaves behind, or what
+S-Boot does for a normal boot given that state. Not yet separated: whether the
+hang is in S-Boot before it hands over, in U-Boot, or in the kernel early boot.
+The control `a5-diag reboot recovery` (run before the download test, Jimmy) landed in TWRP, same as the Power-hold path.
+
 ## K1. Touchscreen: built 2026-10-20, NOT yet tested on the phone (branch android-k1)
 
 **What.** Device tree, config and a5-diag for the Zinitix ZT7538 touch panel.
