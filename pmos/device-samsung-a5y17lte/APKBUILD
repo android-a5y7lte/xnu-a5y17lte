@@ -3,7 +3,7 @@ maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=device-samsung-a5y17lte
 pkgdesc="Samsung Galaxy A5 (2017)"
 pkgver=3
-pkgrel=2
+pkgrel=3
 url="https://github.com/android-a5y7lte/xnu-a5y17lte"
 license="MIT"
 arch="aarch64"
@@ -19,6 +19,8 @@ source="
 	deviceinfo
 	90-a5y17lte-usb0.conf
 	unudhcpd.usb0.confd
+	a5y17lte-usbnet
+	a5y17lte-usbnet.initd
 "
 
 build() {
@@ -29,16 +31,19 @@ package() {
 	devicepkg_package $startdir $pkgname
 	install -Dm644 "$srcdir"/90-a5y17lte-usb0.conf \
 		"$pkgdir"/etc/NetworkManager/conf.d/90-a5y17lte-usb0.conf
+	install -Dm755 "$srcdir"/a5y17lte-usbnet "$pkgdir"/usr/bin/a5y17lte-usbnet
 }
 
 openrc() {
 	# hwclock -> swclock (no RTC driver yet, see the post-install), and
-	# unudhcpd on usb0 answers as 172.16.42.1
+	# unudhcpd on usb0 answers as 172.16.42.1, a5y17lte-usbnet routes through the PC
 	install_if="$pkgname=$pkgver-r$pkgrel openrc"
 	install="$subpkgname.post-install $subpkgname.post-upgrade"
 	depends="openrc"
 	install -Dm644 "$srcdir"/unudhcpd.usb0.confd \
 		"$subpkgdir"/etc/conf.d/unudhcpd.usb0
+	install -Dm755 "$srcdir"/a5y17lte-usbnet.initd \
+		"$subpkgdir"/etc/init.d/a5y17lte-usbnet
 }
 
 sha512sums="

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Galaxy A5 (2017): internet over the USB cable. The PC does NAT (EVIDENCE 26)
+# and is 172.16.42.2; the phone's usb0 is 172.16.42.1 (boot image). Adds a
+# default route through the PC when usb0 is up and nothing else provides one,
+# so a cable plugged in later works too and a missing PC costs nothing.
+PC=172.16.42.2
+while :; do
+	if ip -4 addr show dev usb0 2>/dev/null | grep -q 'inet 172\.16\.42\.1/' &&
+	   [ -z "$(ip -4 route show default)" ]; then
+		ip route add default via $PC dev usb0 metric 600 2>/dev/null
+	fi
+	sleep 5
+done

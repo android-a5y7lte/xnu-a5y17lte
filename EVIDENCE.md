@@ -1937,3 +1937,19 @@ phone cleanly, no hang at the Samsung logo, and `ssh user@172.16.42.1` worked ri
 after (welcome banner). The reboot-hang fix is confirmed on the real boot image
 (`out/a5y17lte-mainline-m5f-boot.img`, sha256 `8a560001…5f84`, commit 8381b93).
 The root cause stays as written under reloc0 (DRAM at 0x48000000-~0x48016000).
+
+## 30. Persistence of route, DNS and clock (2026-10-27)
+
+What the rootfs already has: `swclock` (boot runlevel; restores the time of the
+last clean shutdown), `chronyd` (default; `pool pool.ntp.org iburst`, `makestep 1
+-1`, so it steps the clock whenever NTP is reachable), `routewrangler` and
+NetworkManager (usb0 unmanaged). `/etc/resolv.conf` is the systemd-resolved stub
+(`nameserver 127.0.0.53`) with nothing behind it under OpenRC.
+So the clock needs only a route and DNS: chronyd sets it by itself once the
+network works. Package `device-samsung-a5y17lte` 3-r3 (in git, rootfs not yet
+rebuilt): `a5y17lte-usbnet` (+ OpenRC service, default runlevel, after
+unudhcpd.usb0, before chronyd) adds `default via 172.16.42.2 dev usb0 metric 600`
+whenever usb0 is 172.16.42.1 and nothing else provides a default route (polls
+every 5 s, so a cable plugged in later works); post-install writes real
+nameservers (1.1.1.1, 9.9.9.9) when resolv.conf is the stub; `build-pmos.sh`
+repeats that on the image (post-install ordering trap, like hwclock).

@@ -1,0 +1,10 @@
+#!/sbin/openrc-run
+description="Default route through the PC on usb0 (USB internet)"
+command=/usr/bin/a5y17lte-usbnet
+command_background=true
+pidfile=/run/a5y17lte-usbnet.pid
+
+depend() {
+	after unudhcpd.usb0
+	before chronyd
+}

@@ -94,6 +94,22 @@ rm -f "$F"
 # No RTC driver yet: device-samsung-a5y17lte-openrc enables swclock, but
 # postmarketos-base-openrc's post-install runs after it and adds hwclock back
 debugfs -w -R "rm /etc/runlevels/boot/hwclock" "$O/samsung-a5y17lte-root.img" >/dev/null 2>&1
+# Same ordering trap for resolv.conf: the stub 127.0.0.53 has no resolver behind
+# it under OpenRC (EVIDENCE 26); give it real nameservers (the device package's
+# post-install does that too, but base's can run after it)
+if debugfs -R "cat /etc/resolv.conf" "$O/samsung-a5y17lte-root.img" 2>/dev/null | grep -q '^nameserver 127\.0\.0\.53'; then
+	F="$(mktemp)"; printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' > "$F"
+	debugfs -w -f - "$O/samsung-a5y17lte-root.img" >/dev/null 2>&1 <<EOF
+rm /etc/resolv.conf
+write $F /etc/resolv.conf
+sif /etc/resolv.conf uid 0
+sif /etc/resolv.conf gid 0
+sif /etc/resolv.conf mode 0100644
+EOF
+	rm -f "$F"
+fi
+debugfs -R "cat /etc/resolv.conf" "$O/samsung-a5y17lte-root.img" 2>/dev/null
+debugfs -R "ls /etc/runlevels/default" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep usbnet || echo "WARNING: a5y17lte-usbnet not in the default runlevel"
 debugfs -R "ls /etc/runlevels/boot" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep -E 'clock' || true
 debugfs -R "cat /etc/fstab" "$O/samsung-a5y17lte-root.img" 2>/dev/null
 e2fsck -fn "$O/samsung-a5y17lte-root.img" | tail -1
