@@ -1982,3 +1982,33 @@ the service recreated them, a restart adds no duplicates, the phone pings
 1.1.1.1 and resolves names. Not tested: an actual PC reboot (the service is
 enabled; check after the next one with `systemctl status a5y17lte-nat`). Undo: see
 the header of the install script.
+
+## 31. Touchscreen: findings from the vendor tree (2026-10-27, no hardware yet)
+
+Sources: `upstream/k7880` `exynos7880-a5y17lte_common.dtsi`, `..._eur_open_0N.dts`,
+mainline v7.2 `drivers/input/touchscreen/zinitix.c`.
+
+- **The touch IC depends on the board revision.** Rev 00 (`_00.dts`): Samsung
+  `sec,sec_ts` at I2C 0x48 (firmware `mc44_a7x.bin`, supply LDO34 "vdd_ldo34");
+  the Zinitix node is disabled there. Revs 01-03 (and the common dtsi):
+  Zinitix ZT7538, `zinitix,bt532_ts_device` at 0x20, supply LDO34 (rev 01/02) or
+  a fixed "tsp_avdd" regulator (rev 05/08). Which revision our phone is: unknown.
+- **Mainline has the driver for Zinitix**: `zinitix.c` lists bt532 and bt538
+  (and bt541). No mainline driver for `sec_ts`. So a Zinitix revision is a
+  DT-only job; a `sec_ts` revision would need a new driver.
+- **Wiring** (vendor DT): touch I2C = `i2c@13890000` (`i2c_2`, pins gpc2-0 SDA,
+  gpc2-1 SCL, function 2; pin controller NFC), IRQ gpa0-5 (ALIVE, already in our
+  DT), supply = S2MPU05 LDO34 (3.3 V), the PMIC at 7-bit 0x66 on
+  `hsi2c@10610000` (HSI2C_CCORE_AP, gpm0-0 SDA, gpm0-1 SCL; pin controller CCORE),
+  IRQ gpa0-2. Mainline v7.2 has S2MPU05 support (`sec-i2c.c`, `s2mps11.c`,
+  `samsung,s2mpu05.yaml`), so the PMIC can be a normal node. The pin driver
+  already has the banks (gpm0 in CCORE, gpc2 in NFC); our DT has only the ALIVE
+  and TOP controllers, so CCORE and NFC need nodes. No CMU_PERI driver yet
+  (I2C clocks): as with the MUIC, bit-banged `i2c-gpio` buses are the first step.
+- **Plan**: (a) `i2c-gpio` buses on gpm0-0/1 (PMIC) and gpc2-0/1 (touch) in the
+  DT with the CCORE and NFC pin controllers; in Nura use `i2c-tools`: read the
+  PMIC ID, read/enable LDO34 (RAM only, a PMIC register write), then scan the
+  touch bus for 0x20 or 0x48 to learn the revision. (b) If 0x20: Zinitix node
+  (`zinitix,bt538`, size 1080x1920, IRQ gpa0-5, supply from the PMIC node) with
+  the mainline driver, then `evtest`. If 0x48: decide between a new driver and
+  something else. (c) Then Phosh.
