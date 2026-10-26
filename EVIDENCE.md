@@ -1746,3 +1746,11 @@ either.
 Images `rst10` and `rst11` are built. Order: 10 first (midpoint). Hang at 10:
 test 11, then head.S. Loop at 10: bisect levels 0-7 (all within about 0.15 s of
 boot).
+
+**rst10 result (Jimmy, 2026-10-26): white stripe appeared (checkpoint 10
+reached, start of `kernel_init_freeable()`), then the plain reset hung at the
+Samsung logo, no loop.** So the cause is at or before checkpoint 10, i.e. in
+head.S / `start_kernel()` / `setup_arch()` up to `rest_init()`. Next: `rst11`
+(checkpoint right after `setup_arch()`). Hang at 11: cause is in head.S or
+`setup_arch()` (or what U-Boot leaves behind); loop at 11: cause is between
+`setup_arch()` and `kernel_init_freeable()`.
