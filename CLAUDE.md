@@ -66,7 +66,10 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   CONFIG_BLK_DEV_WRITE_MOUNTED is off), so use mainline/tools/ext4-grow.c
   (ioctl on the mount point; static binary build/ext4-grow-aarch64, not in git).
 - Known bug: `sudo reboot` in Nura hangs on the Samsung logo (repeatable);
-  workaround: Volume Down + Power to force off, then power on.
+  workaround: Volume Down + Power to force off, then power on. ROOT CAUSE FOUND
+  (EVIDENCE 29, 2026-10-27): any DRAM write at 0x48000000-~0x48016000 makes the next
+  plain reset hang S-Boot. Fix: DT reserved-memory sboot-reset@48000000 (128 KiB)
+  and the kernel loaded at 0x48200000 (reloc0 loops; m5f = Nura with the fix).
 - M5e step 5 PASSED (EVIDENCE 26): internet via PC NAT. PC: ip_forward, iptables
   MASQUERADE 172.16.42.0/24 -> wlp2s0 plus DOCKER-USER ACCEPTs for
   enx02a517000002 (Docker's FORWARD is DROP). Phone, RAM only, redo each boot:

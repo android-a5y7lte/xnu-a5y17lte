@@ -1912,3 +1912,22 @@ panel, then a plain `reboot -f`): if the DRAM theory is complete, it LOOPS (the
 first time a plain reset after Linux does). Hang = another bad region exists
 (e.g. in the initrd/FDT placement or in what Linux writes elsewhere); then bisect
 with the checkpoints again.
+
+**reloc0 result (Jimmy, 2026-10-27): LOOPS. THE RESET HANG IS FIXED.** "STAGE 0
+reached: plain reboot -f in 3s" on the console, then the phone rebooted by itself
+and cycled logo, console banner, logo, repeatedly. Left with Volume Up + Home +
+Power into TWRP.
+
+**Root cause (EVIDENCE 27-29).** A write into DRAM at 0x48000000-about 0x48016000
+(bad at 0x48000000, 0x48010000, 0x48014000; fine at 0x47fff000, 0x48018000 and
+every other probe up to 0x50000000) makes the next plain SWRESET hang S-Boot at
+the Samsung logo. The same reset after a named reset (recovery, download) worked,
+and a plain reset from U-Boot without any write worked, which is why the hunt went
+through the kernel, U-Boot's `bootm` and the drivers first. What lives there is
+unknown (S-Boot state that it re-reads after a warm reset). Fix: a no-map
+reserved-memory entry (128 KiB at 0x48000000) in the DT, and the kernel loaded at
+0x48200000 instead of 0x48000000. Not yet checked: the exact end (between
+0x48014000 and 0x48018000, covered by the 128 KiB margin), other bad regions that
+a full boot did not touch.
+
+Next: `m5f` = the normal Nura boot image with this fix; test `sudo reboot` in Nura.
