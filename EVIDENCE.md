@@ -2012,3 +2012,27 @@ mainline v7.2 `drivers/input/touchscreen/zinitix.c`.
   (`zinitix,bt538`, size 1080x1920, IRQ gpa0-5, supply from the PMIC node) with
   the mainline driver, then `evtest`. If 0x48: decide between a new driver and
   something else. (c) Then Phosh.
+
+**m6a probe (Jimmy booted it, 2026-10-27): the bit-banged buses work.** The kernel
+registered `i2c-gpio-muic` (i2c-0), `i2c-gpio-pmic` (i2c-1), `i2c-gpio-touch`
+(i2c-2); the new CCORE and NFC pin controllers probed without a hang (the
+gate_pinctrl clock was left on by S-Boot).
+- **PMIC found**: 0x66 on i2c-1; register 0x00 (ID) = 0x82. Register numbers are the
+  `enum S2MPU05_reg` indices: L32CTRL 0x4e, L34CTRL 0x50, L35CTRL 0x51. At boot
+  all three read 0x28 / 0x3c / 0x3c (the voltages 2.8 / 3.3 / 3.3 V are already
+  set, the enable bits [7:6] are 00 = off). Writing 0xe8 / 0xfc / 0xfc turned
+  them on, and the touch bus still showed nothing at 0x08-0x77; the values were
+  written back afterwards (RAM state only).
+- **The touch IC is powered by a GPIO, not the PMIC**: with gpd1-4 driven high
+  (the "tsp_avdd" regulator-fixed of the rev 05/08 DTs, 3.3 V) a device
+  ACKs at **0x20** on i2c-2 (gpc2-0/1). So this phone has the rev >= 05 wiring and
+  the Zinitix address 0x20 (not Samsung's `sec_ts` at 0x48).
+- **Odd readback**: register reads return the pointer then 1, 2, 3 (little-endian 16-bit words):
+  `w2 0x80 0x00 r8` -> `80 00 01 00 02 00 03 00`, `w2 0x34 0x12 r4` -> `34 12 01 00`,
+  and every register tried (0x00, 0x11, 0x12, 0x14, 0xc0, 0xc1, 0xcc, 0x121) gave
+  its own address. Not a real Zinitix register file (chip revision, resolution
+  would differ). Possibly the IC is in its bootloader/ROM state or needs a
+  reset/enable sequence first; the mainline driver's init (SWRESET, then
+  reads) is the real test. Tools used: `i2c-tools`, `libgpiod` (installed on the phone
+  with apk). Next: `m6b` = Zinitix node (bt538, 1080x1920, IRQ gpa0-5), tsp_avdd
+  regulator-fixed on gpd1-4, kernel config TOUCHSCREEN_ZINITIX.
