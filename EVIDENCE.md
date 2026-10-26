@@ -1931,3 +1931,9 @@ reserved-memory entry (128 KiB at 0x48000000) in the DT, and the kernel loaded a
 a full boot did not touch.
 
 Next: `m5f` = the normal Nura boot image with this fix; test `sudo reboot` in Nura.
+
+**m5f result (Jimmy, 2026-10-27): PASSED.** `sudo reboot` from Nura restarted the
+phone cleanly, no hang at the Samsung logo, and `ssh user@172.16.42.1` worked right
+after (welcome banner). The reboot-hang fix is confirmed on the real boot image
+(`out/a5y17lte-mainline-m5f-boot.img`, sha256 `8a560001…5f84`, commit 8381b93).
+The root cause stays as written under reloc0 (DRAM at 0x48000000-~0x48016000).

@@ -65,11 +65,12 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   176027/1241088 blocks). resize2fs can't run on the live root (EBUSY:
   CONFIG_BLK_DEV_WRITE_MOUNTED is off), so use mainline/tools/ext4-grow.c
   (ioctl on the mount point; static binary build/ext4-grow-aarch64, not in git).
-- Known bug: `sudo reboot` in Nura hangs on the Samsung logo (repeatable);
+- Fixed bug: `sudo reboot` in Nura hung on the Samsung logo (repeatable);
   workaround: Volume Down + Power to force off, then power on. ROOT CAUSE FOUND
   (EVIDENCE 29, 2026-10-27): any DRAM write at 0x48000000-~0x48016000 makes the next
   plain reset hang S-Boot. Fix: DT reserved-memory sboot-reset@48000000 (128 KiB)
-  and the kernel loaded at 0x48200000 (reloc0 loops; m5f = Nura with the fix).
+  and the kernel loaded at 0x48200000. m5f (out/a5y17lte-mainline-m5f-boot.img) PASSED:
+  `sudo reboot` in Nura restarts cleanly. FIXED; the workaround is no longer needed.
 - M5e step 5 PASSED (EVIDENCE 26): internet via PC NAT. PC: ip_forward, iptables
   MASQUERADE 172.16.42.0/24 -> wlp2s0 plus DOCKER-USER ACCEPTs for
   enx02a517000002 (Docker's FORWARD is DROP). Phone, RAM only, redo each boot:
@@ -78,7 +79,7 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   conflict), clock via `date -u -s` (no RTC). `apk update` OK, 37182 packages.
   M5e (all 5 steps) is COMPLETE.
 - NEXT (not started): make route/DNS/clock persistent in the device package;
-  fix the reboot hang; then touchscreen -> Phosh (roadmap below).
+  then touchscreen -> Phosh (roadmap below).
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)
