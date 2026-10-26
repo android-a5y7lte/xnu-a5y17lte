@@ -11,6 +11,7 @@
 #include "exynos7880.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	model = "Samsung Galaxy A5 (2017)";
@@ -140,6 +141,32 @@
 		i2c-gpio,delay-us = <5>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+	
+		/*
+		 * [H] A device ACKs at 0x20 once gpd1-4 is high (EVIDENCE 31). [D] common
+		 * dtsi: zinitix ZT7538, IRQ gpa0-5, 1080x1920, supply tsp_avdd.
+		 */
+		touchscreen@20 {
+			compatible = "zinitix,bt538";
+			reg = <0x20>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&touch_irq>;
+			vdd-supply = <&tsp_avdd>;
+			touchscreen-size-x = <1080>;
+			touchscreen-size-y = <1920>;
+		};
+	};
+
+	/* [D] exynos7880-a5y17lte_eur_open_05.dts tsp_avdd: gpd1-4, 3.3 V */
+	tsp_avdd: regulator-tsp-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "tsp_avdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpd1 4 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
 	};
 
 	/* [D] memory@40000000 0x3E400000 and memory@80000000 0x80000000 (3 GB) */
@@ -250,6 +277,14 @@
 
 /* [D] key-power/voldown/volup/home: function 0xf (EINT), pud 0, drv 0 */
 &pinctrl_alive {
+	/* [D] attn_irq: gpa0-5, function 0xf (EINT), pud 0 */
+	touch_irq: touch-irq-pins {
+		samsung,pins = "gpa0-5";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
 	key_power: key-power-pins {
 		samsung,pins = "gpa0-0";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
