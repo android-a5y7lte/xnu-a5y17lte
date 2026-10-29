@@ -2313,3 +2313,19 @@ bit-banged bus (vendor i2c@20: SDA gpd4-5, SCL gpd4-3), IRQ gpa1-4, firmware
 vendor driver (`abov_touchkey_ft1804.c`) only exists in the Sailfish tree, which the project rules
 keep us out of, so Jimmy chose empirical probing (as for the touch IC): `m9a` adds an `i2c-gpio-tkey`
 bus, no driver; supply switched on from userspace via the PMIC bus.
+
+**Probing the touch-key MCU (m9a, 2026-10-29).** The bit-banged `i2c-gpio-tkey` bus is i2c-2
+(with the touch bus i2c-3). The MCU does not answer at 0x20 until PMIC LDO32 (`vtouch_2.8v`,
+register 0x4e, write 0xe8) is on; LDO35 alone (3.3 V) is not enough, LDO34 not needed. With it on,
+`i2cdump` of 0x00-0xff gives a stable register map: `00=00 01=0d 02=96 03=96 04=11 05=22 06=33 ...`
+(0x01 looks like a firmware version, as in other Abov chips); raw-looking data at 0x0e-0x11 drifts
+by itself. Pressing the menu key gives large swings in 0x0a/0x0b (e.g. 0x0152, 0x01f5; 0x0c/0x0d stay
+0) while register 0x07 flips through 0x02/0x00/0x01/0x00 and the IRQ line (gpa1-4, normally high)
+dips low for short moments, so the first sensor channel is the MENU key and the second (0x0c/0x0d)
+is presumably BACK. Register 0x00 (a button status byte in similar chips) never left 0 in any
+capture. Mistakes to avoid: a plain 1-byte read (`i2ctransfer r1@0x20`) returns whatever the
+register pointer points at, and it left the MCU stuck with IRQ low and the register reads dead
+until its supply is cycled; capture windows must not be fixed-length (use a stop file).
+Not decoded: how the MCU reports "key down/up" (status register or some command to
+enable it), the key-LED control, the IRQ clearing rule. The LDOs were put back to their boot
+values (0x28 / 0x3c / 0x3c) afterwards.
