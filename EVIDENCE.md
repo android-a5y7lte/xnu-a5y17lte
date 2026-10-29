@@ -2130,3 +2130,18 @@ count=1`). Final check: the first 1415 MiB of SYSTEM read back, sha256
 sha256sum on >1 GiB ranges as the only check (it disagreed with the PC).
 Lesson for any later SYSTEM write: pull it back and compare on the PC.
 Next: boot (m6c boot image + this rootfs), grow with `ext4-grow`, check Phosh.
+
+## 34. The mkinitfs apk trigger (2026-10-29)
+
+Cause: `postmarketos-mkinitfs` runs from apk triggers (/lib/firmware, /usr/share/kernel,
+...) and `boot-deploy` aborts with "No kernel found in /boot" because pmbootstrap
+`--split` leaves the rootfs /boot empty (our kernel is in the BOOT FIT). The abort fails
+the whole apk transaction. Dropping the package is impossible (`apk del --simulate`:
+required via `postmarketos-initramfs` by postmarketos-base, -ui-console, our device
+package, sudo-rs, doas). Fix (tested live on the phone first): an empty
+`/boot/vmlinuz`; then `mkinitfs` exits 0 (3.5 s, writes an unused 9 MB
+`/boot/initramfs`) and apk transactions complete (`apk fix --reinstall
+postmarketos-mkinitfs`, `apk add`/`del` all exit 0). `build-pmos.sh` now adds the
+placeholder to new images with debugfs (dry-run on a copy of the current image:
+fsck clean). The phone has the placeholder and an initramfs in /boot now; they
+could be deleted but would be regenerated.

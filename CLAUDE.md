@@ -106,8 +106,8 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   tested: Phosh, route, clock, services all come back by themselves. Boot image is
   out/a5y17lte-mainline-m6c-boot.img. Writing SYSTEM: always compare a pull-back
   on the PC (TWRP's sha256sum disagreed on >1 GiB).
-- NEXT (next session): (1) fix the mkinitfs apk trigger permanently (it fails on a
-  running phone, "No kernel found in /boot"); (2) sleep-inhibitor service fails at
+- NEXT (next session): (1) [done, EVIDENCE 34: empty /boot/vmlinuz placeholder, in
+  build-pmos.sh and on the phone] (2) sleep-inhibitor service fails at
   boot but starts fine by hand (ordering vs elogind/dbus); (3) back/menu keys (Abov
   MCU) and Home key in Phosh; (4) backlight; (5) then the real DECON/DSI driver
   (roadmap, with the CMU clock driver), GPU, battery, audio, Wi-Fi.

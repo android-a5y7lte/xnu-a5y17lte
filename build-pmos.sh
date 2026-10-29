@@ -139,6 +139,21 @@ for f in /etc/greetd/config.toml /etc/phosh/phoc.ini /usr/bin/a5-phosh-session; 
 done
 debugfs -R "ls /etc/runlevels/default" "$IMG" 2>/dev/null | tr -s ' ' '\n' | grep -E 'elogind|polkit|greetd|usbnet|dbus' | tr '\n' ' '; echo
 debugfs -R "cat /etc/inittab" "$IMG" 2>/dev/null | grep tty1
+# The kernel lives in the BOOT partition's FIT, and pmbootstrap --split moves /boot out
+# of the rootfs, so /boot is empty. postmarketos-mkinitfs (not removable: base needs
+# it) runs from apk triggers and boot-deploy aborts the whole apk transaction with
+# "No kernel found in /boot". An empty /boot/vmlinuz is enough for it to succeed
+# (it then writes an unused /boot/initramfs). EVIDENCE 34.
+if ! debugfs -R "stat /boot/vmlinuz" "$IMG" 2>&1 | grep -q "Inode:"; then
+	echo "adding the placeholder /boot/vmlinuz"
+	debugfs -w -f - "$IMG" >/dev/null 2>&1 <<EOF
+write /dev/null /boot/vmlinuz
+sif /boot/vmlinuz uid 0
+sif /boot/vmlinuz gid 0
+sif /boot/vmlinuz mode 0100644
+EOF
+fi
+debugfs -R "stat /boot/vmlinuz" "$IMG" 2>&1 | grep -q "Inode:" || echo "WARNING: /boot/vmlinuz missing from the image"
 debugfs -R "ls /etc/runlevels/boot" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep -E 'clock' || true
 debugfs -R "cat /etc/fstab" "$O/samsung-a5y17lte-root.img" 2>/dev/null
 e2fsck -fn "$O/samsung-a5y17lte-root.img" | tail -1
