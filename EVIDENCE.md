@@ -2329,3 +2329,27 @@ until its supply is cycled; capture windows must not be fixed-length (use a stop
 Not decoded: how the MCU reports "key down/up" (status register or some command to
 enable it), the key-LED control, the IRQ clearing rule. The LDOs were put back to their boot
 values (0x28 / 0x3c / 0x3c) afterwards.
+
+**Touch-key protocol decoded from the vendor driver (Jimmy OK'd reading that one file read-only
+from a Timeshift copy of the Sailfish tree, 2026-10-29; nothing copied into the repo, nothing
+modified).** On the interrupt (gpa1-4, low while an event is pending) read register 0x07
+(`ABOV_BTNSTATUS_NEW`): bits 1:0 recent-apps key, bits 3:2 back key, 0b10 = press, 0b01 = release
+(menu_press = !(data % 2)); vendor keycodes KEY_RECENT (a Samsung code, not in mainline) and
+KEY_BACK. Register 0x00: write 0x10/0x20 = key backlight on/off; 0x08/0x09 = LED dimming of the
+recent and back keys (1-0x1f); 0x0a diff data, 0x0e raw data, 0x01 firmware version; power-up
+delay 45 ms, reset 150 ms. This matches the 1/2/4/8 values seen with i2cdump. Home key
+check: `KEY_LEFTMETA` makes Phosh toggle its overview (Jimmy, 2026-10-29).
+
+**m9b (built, not flashed):** two new kernel patches, `0008` (binding `abov,a96t316` and the
+`abov` vendor prefix) and `0009` (driver `drivers/input/keyboard/abov-a96t316.c`: SMBUS
+byte reads, level-low threaded IRQ, `vdd` regulator, 150 ms power-on delay, a firmware-version
+read as a presence check, input device with `linux,keycodes` defaulting to KEY_APPSELECT
+(mainline's "recent apps"; KEY_RECENT does not exist) and KEY_BACK, and an LED class device
+`a96t316::kbd_backlight`); checkpatch clean except the "Abov" spelling hits and the MAINTAINERS note
+(no Signed-off-by, per the AI rules). DT: the S2MPU05 PMIC (`samsung,s2mpu05-pmic`, 0x66 on the
+bit-banged i2c-gpio-pmic bus, IRQ gpa0-2 level low) with only `ldo32` ("vtouch_2.8v",
+2.8 V) described, the touch-key controller at 0x20 on i2c-gpio-tkey (IRQ gpa1-4 level low,
+vdd-supply = ldo32), and `regulator_ignore_unused` on the command line so the regulator
+core does not switch off the rails S-Boot left on. Config: MFD_SEC_I2C, REGULATOR_S2MPS11,
+LEDS_CLASS, KEYBOARD_ABOV_A96T316 built in. Not run: dt_binding_check (dtschema is not installed
+here). Kernel package 7.2-r3 lists the two new patches.

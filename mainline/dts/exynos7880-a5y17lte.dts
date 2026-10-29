@@ -27,7 +27,7 @@
 		#size-cells = <1>;
 		ranges;
 
-		bootargs = "console=tty0 loglevel=7 panic=20 clk_ignore_unused pd_ignore_unused fbcon=font:TER16x32";
+		bootargs = "console=tty0 loglevel=7 panic=20 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fbcon=font:TER16x32";
 
 		/* [H] 0x67000000, 1080x1920, ARGB8888 (R G B W bars confirmed) */
 		framebuffer@67000000 {
@@ -418,4 +418,49 @@
 	cap-sd-highspeed;
 	cap-sdio-irq;
 	status = "okay";
+};
+
+/*
+ * S2MPU05 PMIC (EVIDENCE 38): [D] hsi2c@10610000, 7-bit 0x66, interrupt gpa0-2; bit-banged on
+ * gpm0-0/1 for now. Only the LDO the touch-key controller needs is described; the other rails
+ * keep the state S-Boot left them in (`regulator_ignore_unused` is on the command line).
+ */
+&i2c_pmic {
+	pmic@66 {
+		compatible = "samsung,s2mpu05-pmic";
+		reg = <0x66>;
+		interrupt-parent = <&gpa0>;
+		interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
+
+		regulators {
+			ldo32: ldo32 {
+				regulator-name = "vtouch_2.8v";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+			};
+		};
+	};
+};
+
+/* [D] abov@20 on the touch-key i2c-gpio bus; [D] cfg_irq: gpa1-4 EINT, no pull */
+&pinctrl_alive {
+	tkey_irq: tkey-irq-pins {
+		samsung,pins = "gpa1-4";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+};
+
+&i2c_tkey {
+	touchkey@20 {
+		compatible = "abov,a96t316";
+		reg = <0x20>;
+		interrupt-parent = <&gpa1>;
+		interrupts = <4 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&tkey_irq>;
+		vdd-supply = <&ldo32>;
+		linux,keycodes = <KEY_APPSELECT>, <KEY_BACK>;
+	};
 };
