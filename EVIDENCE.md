@@ -2549,3 +2549,13 @@ attempt counts as a failed PAM login), so the safe design is a Phosh patch that 
 the entry reaches a configured PIN length (a new gsetting, 0 = off), 6 for the current passcode. That
 needs a patched `phosh` package (the aport builds with meson; the C change is in `src/lockscreen.c`,
 `input_changed_cb`).
+
+## 43. Apps (2026-10-30, Jimmy's list)
+
+Installed on the running phone (101 packages, +190 MB, 1.4G of 4.6G used): gnome-console (terminal),
+gnome-text-editor, gnome-calculator, gnome-clocks, gnome-contacts, gnome-calendar, loupe (images), papers
+(documents), nautilus (files), gnome-maps and epiphany (GNOME Web; chosen over firefox-esr because it is the
+Phosh-native adaptive browser and much lighter under software rendering). They are in `build-pmos.sh`'s
+`extra_packages` for fresh rootfs builds. The mkinitfs `boot-deploy` step now also complains that
+`exynos/exynos7880-a5y17lte.dtb` is missing from `/boot/dtbs` (not fatal, apk still finishes OK); an
+empty placeholder fixes it, added on the phone and in `build-pmos.sh`.

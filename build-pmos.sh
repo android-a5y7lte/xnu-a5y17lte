@@ -54,7 +54,7 @@ work = $W
 device = samsung-a5y17lte
 ui = console
 service_manager = openrc
-extra_packages = doas,i2c-tools,libgpiod,evtest
+extra_packages = doas,i2c-tools,libgpiod,evtest,gnome-console,gnome-text-editor,gnome-calculator,gnome-clocks,gnome-contacts,gnome-calendar,loupe,papers,nautilus,gnome-maps,epiphany
 user = user
 hostname = a5y17lte
 ssh_keys = True
@@ -154,6 +154,18 @@ sif /boot/vmlinuz mode 0100644
 EOF
 fi
 debugfs -R "stat /boot/vmlinuz" "$IMG" 2>&1 | grep -q "Inode:" || echo "WARNING: /boot/vmlinuz missing from the image"
+# boot-deploy also looks for the device tree blob in /boot/dtbs (EVIDENCE 43): empty placeholder
+if ! debugfs -R "stat /boot/dtbs/exynos/exynos7880-a5y17lte.dtb" "$IMG" 2>&1 | grep -q "Inode:"; then
+	echo "adding the placeholder /boot/dtbs/exynos/exynos7880-a5y17lte.dtb"
+	debugfs -w -f - "$IMG" >/dev/null 2>&1 <<EOF
+mkdir /boot/dtbs
+mkdir /boot/dtbs/exynos
+write /dev/null /boot/dtbs/exynos/exynos7880-a5y17lte.dtb
+sif /boot/dtbs/exynos/exynos7880-a5y17lte.dtb uid 0
+sif /boot/dtbs/exynos/exynos7880-a5y17lte.dtb gid 0
+sif /boot/dtbs/exynos/exynos7880-a5y17lte.dtb mode 0100644
+EOF
+fi
 # sleep-inhibitor cannot run without CONFIG_SUSPEND (EVIDENCE 37): no runlevel link
 if debugfs -R "stat /etc/runlevels/default/sleep-inhibitor" "$IMG" 2>&1 | grep -q "Inode:"; then
 	echo "removing sleep-inhibitor from the default runlevel"
