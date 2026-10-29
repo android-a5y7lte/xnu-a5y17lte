@@ -2452,3 +2452,13 @@ userspace register hack with an unknown command set.
 register driver or careful probing); how S-Boot's framebuffer reaches the DECON (which IDMA, IOMMU
 on or off); the S6E3FA3 brightness/init commands; the PMIC LDO numbers behind LCD_3P0/LCD_1P8 (the PMIC
 driver is live now).
+
+**AOD (Jimmy, 2026-10-30): the phone has an always-on display for the clock.** Relevant to the panel
+and DECON work: (1) the S6E3FA3 can show the clock by itself in a low-power mode, so the panel driver
+will have more than on/off: a doze/LPM state with its own DCS commands and its own (low)
+brightness levels, to be taken from the vendor panel driver; (2) the command-mode panel keeps its
+image without the DECON refreshing it (PSR, the DECON hardware-trigger mode `a5-diag panel` sets), which
+fits AOD; (3) the touch IC advertises it in the vendor DT (`zinitix,aod`, `zinitix,spay`: wake gestures
+while the screen shows only the AOD clock), so our Zinitix setup may later want its wake/idle
+modes, although the mainline driver has none; (4) mainline has no AOD support at all, so
+this is a feature for after the basic display driver works. Not in the vendor DT otherwise (grep).
