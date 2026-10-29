@@ -2397,3 +2397,9 @@ firmware, regulatory.db, the `/boot/vmlinuz` placeholder; runlevel default has a
 greetd, elogind, polkit, dbus, NetworkManager, chronyd (no sleep-inhibitor, no tty1 getty). The last
 2 MiB of the image are zeros (zero them on the phone after the adb write, EVIDENCE 33/36).
 Not yet written to SYSTEM.
+
+**Written to SYSTEM (2026-10-29/30, Jimmy OK'd, TWRP):** `adb exec-in dd bs=1M conv=fsync` (8 min; the
+first try failed at once because adb had not yet enumerated TWRP, nothing was written), last 2 MiB
+zeroed on the phone, pulled back 1431 MiB and compared on the PC: `cmp` 0 differences, sha256
+`fd3c63ce…5fe8` = the image. Next: boot, grow with ext4-grow, re-enter the Wi-Fi password, check the
+key service and a reboot.
