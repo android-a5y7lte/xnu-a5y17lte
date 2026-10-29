@@ -98,10 +98,19 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   refreshes by itself in HW TE mode). The phone's session files are copied to
   pmos/device-samsung-a5y17lte/phosh/ but NOT yet in the device package or
   build-pmos.sh; the phone's rootfs is now ahead of the one build-pmos.sh builds.
-- NEXT: (1) package the Phosh session + persistence in the device package and
-  rebuild/verify the rootfs; (2) fix the mkinitfs trigger; (3) back/menu keys
-  (Abov MCU) and Home key; (4) then the real DECON/DSI driver (roadmap, with the
-  CMU clock driver), GPU, battery, audio, Wi-Fi.
+- ROOTFS WITH PHOSH PACKAGED AND ON THE PHONE (EVIDENCE 33, 2026-10-29): device package
+  3-r4 (Phosh session, greetd autologin, phoc scale 2, services, tty1 getty off) ->
+  build/pmos/samsung-a5y17lte-root.img (1483735040 B, sha256 fee7ccdb…4d52), written to
+  SYSTEM from TWRP and verified by pulling it back (see EVIDENCE 33 about the zero
+  tail), grown with ext4-grow to 1241088 blocks (4.6G, 3.3G free), `sudo reboot`
+  tested: Phosh, route, clock, services all come back by themselves. Boot image is
+  out/a5y17lte-mainline-m6c-boot.img. Writing SYSTEM: always compare a pull-back
+  on the PC (TWRP's sha256sum disagreed on >1 GiB).
+- NEXT (next session): (1) fix the mkinitfs apk trigger permanently (it fails on a
+  running phone, "No kernel found in /boot"); (2) sleep-inhibitor service fails at
+  boot but starts fine by hand (ordering vs elogind/dbus); (3) back/menu keys (Abov
+  MCU) and Home key in Phosh; (4) backlight; (5) then the real DECON/DSI driver
+  (roadmap, with the CMU clock driver), GPU, battery, audio, Wi-Fi.
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)
