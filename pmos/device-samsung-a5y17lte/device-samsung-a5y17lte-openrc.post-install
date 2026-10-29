@@ -17,4 +17,7 @@ rc-update -q add greetd default
 if [ -f /etc/inittab ]; then
 	sed -i 's|^\(tty1::respawn:\)|#a5y17lte (greetd owns tty1) \1|' /etc/inittab
 fi
+# sleep-inhibitor needs /sys/power/state; this kernel has no CONFIG_SUSPEND, so it quits
+# at once and the supervisor ends up "failed" (EVIDENCE 37). Back in when suspend works.
+rc-update -q del sleep-inhibitor default 2>/dev/null
 exit 0

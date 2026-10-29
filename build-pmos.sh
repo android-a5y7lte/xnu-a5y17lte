@@ -154,6 +154,11 @@ sif /boot/vmlinuz mode 0100644
 EOF
 fi
 debugfs -R "stat /boot/vmlinuz" "$IMG" 2>&1 | grep -q "Inode:" || echo "WARNING: /boot/vmlinuz missing from the image"
+# sleep-inhibitor cannot run without CONFIG_SUSPEND (EVIDENCE 37): no runlevel link
+if debugfs -R "stat /etc/runlevels/default/sleep-inhibitor" "$IMG" 2>&1 | grep -q "Inode:"; then
+	echo "removing sleep-inhibitor from the default runlevel"
+	debugfs -w -R "rm /etc/runlevels/default/sleep-inhibitor" "$IMG" >/dev/null 2>&1
+fi
 debugfs -R "ls /etc/runlevels/boot" "$O/samsung-a5y17lte-root.img" 2>/dev/null | tr -s ' ' '\n' | grep -E 'clock' || true
 debugfs -R "cat /etc/fstab" "$O/samsung-a5y17lte-root.img" 2>/dev/null
 e2fsck -fn "$O/samsung-a5y17lte-root.img" | tail -1

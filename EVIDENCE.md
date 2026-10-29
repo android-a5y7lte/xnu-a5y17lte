@@ -2287,3 +2287,15 @@ as fallback at metric 700, then `ext4-grow / 1241088` (4.6G, 3.2G free). After `
 kept, ath10k loaded, wlan0 connected, 2/2 pings through wlan0 about 10 ms, phoc and squeekboard
 running; only `sleep-inhibitor` shows failed (known, boot-time ordering). The board-data
 message (`failed to fetch board data ... board-2.bin`, then generic board.bin) is expected.
+
+## 37. sleep-inhibitor (2026-10-29, from the paused list)
+
+It showed "failed" after every boot. Cause (error log): `System does not support any sleep
+states, quitting.` The pmOS tool exits 1 when `/sys/power/state` does not exist, and our kernel
+has `# CONFIG_SUSPEND is not set` (no suspend/hibernate at all), so it can never run; OpenRC's
+supervisor respawned it 5 times in about 10 s and gave up. Not an ordering problem: `rc_need=elogind`
+changed nothing, and `respawn_max=0` only produced an endless 5-second failure loop (both
+reverted). Fix: take it out of the default runlevel (`rc-update del sleep-inhibitor default`) in
+the device package post-install/post-upgrade (3-r6) and in `build-pmos.sh`'s image check; live
+phone done and reboot-tested: 0 failed services. Bring it back together with suspend support
+(`CONFIG_SUSPEND`, which needs the PMIC/wake sources worked out first).
