@@ -2377,3 +2377,12 @@ back key = KEY_ESC (Jimmy's choice), recents stays KEY_APPSELECT. Userspace: `a5
 brightness 16, timeout 1.0 s) watches the touch-key device and the Home key on gpio-keys
 (KEY_LEFTMETA) and lights the LED on a press with a 1 s re-armed timer. Device package 3-r7
 (depends python3) and build-pmos.sh's runlevel check know the service.
+
+**m9c result (Jimmy, 2026-10-29): the button backlight behaves as asked.** Booted fine; with
+`a5y17lte-keyled` installed on the live rootfs (copied from the device package, enabled in
+the default runlevel), pressing Home, recents or back lights the buttons and they go dark after about
+1 s (brightness 16 of 31). At rest `vtouch_3.3v` (ldo35) is disabled with 0 users, so the key LEDs draw
+nothing. After `reboot`: 0 failed services, the service starts by itself, wlan0 connected, Phosh up.
+The rootfs image on the PC does not have the service/touch-key setup yet (device package 3-r7 and the
+kernel package 7.2-r3 contain it): the next `build-pmos.sh` + SYSTEM write picks it up.
+Not checked: what Esc (back) does in Phosh.

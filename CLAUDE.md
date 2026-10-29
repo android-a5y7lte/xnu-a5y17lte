@@ -118,11 +118,22 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   boot after flashing m8c had no USB link (PC: error -71 enumeration), fixed by replug + restart;
   cause unknown. FWEMBED=1 in build-mainline.sh still embeds the firmware (image then not for git).
   The "for next session" list below stays paused until Jimmy resumes it.
-- NEXT (next session): (1) [done, EVIDENCE 34: empty /boot/vmlinuz placeholder, in
-  build-pmos.sh and on the phone] (2) sleep-inhibitor service fails at
-  boot but starts fine by hand (ordering vs elogind/dbus); (3) back/menu keys (Abov
-  MCU) and Home key in Phosh; (4) backlight; (5) then the real DECON/DSI driver
-  (roadmap, with the CMU clock driver), GPU, battery, audio, Wi-Fi.
+- BUTTONS WORK (EVIDENCE 38, 2026-10-29): Home = gpio-keys KEY_LEFTMETA (Phosh overview);
+  recents = KEY_APPSELECT and back = KEY_ESC from a new Abov A96T316 touch-key driver (kernel
+  patches 0008 binding + 0009 driver, probed empirically then checked against the vendor driver,
+  which Jimmy allowed us to read read-only from a Timeshift copy of the Sailfish tree; nothing
+  was copied). It needed a real S2MPU05 PMIC node (7.2 mainline driver, bit-banged on gpm0-0/1,
+  only ldo32 "vtouch_2.8v" = controller supply and ldo35 "vtouch_3.3v" = key LED supply
+  described) and `regulator_ignore_unused` on the command line. The buttons light for ~1 s on a
+  press via the a5y17lte-keyled service (python3). Boot image out/a5y17lte-mainline-m9c-boot.img
+  (in git). The rootfs on the phone has the service installed by hand; the rootfs IMAGE on the PC
+  does not yet: rebuild with build-pmos.sh and write SYSTEM to bake it in.
+- sleep-inhibitor FIXED (EVIDENCE 37): no CONFIG_SUSPEND, so it is out of the default runlevel.
+- NEXT: (1) rebuild + write the rootfs (picks up the key service, kernel pkg 7.2-r3 with patches
+  0008/0009); (2) backlight control (screen brightness; no backlight device yet, "No backlight"
+  in the phoc log); (3) then the real DECON/DSI display driver (roadmap, with the CMU clock
+  driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,
+  Bluetooth).
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)
