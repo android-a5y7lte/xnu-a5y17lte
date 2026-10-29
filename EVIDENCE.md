@@ -2353,3 +2353,12 @@ vdd-supply = ldo32), and `regulator_ignore_unused` on the command line so the re
 core does not switch off the rails S-Boot left on. Config: MFD_SEC_I2C, REGULATOR_S2MPS11,
 LEDS_CLASS, KEYBOARD_ABOV_A96T316 built in. Not run: dt_binding_check (dtschema is not installed
 here). Kernel package 7.2-r3 lists the two new patches.
+
+**m9b result (Jimmy, 2026-10-29): the PMIC and the touch-key driver work.** Booted first try,
+Phosh/touch/Wi-Fi unaffected. dmesg: `Not disabling unused regulators`
+(regulator_ignore_unused), `a96t316 2-0020: firmware version 0x0d`, input "A96T316 touch keys",
+LED `a96t316::kbd_backlight`; sysfs: `vtouch_2.8v` enabled (1 user, PMIC ldo32), `tsp_avdd`, `cnss_dcdc_en`
+enabled. evtest on the new device: menu key -> KEY_APPSELECT (580), back -> KEY_BACK (158), clean
+down/up pairs 70-300 ms apart (9 presses each, no duplicates). Pending: whether the key
+backlight lights (brightness 1 written), what Phosh does with APPSELECT/BACK (nothing is bound
+by default), the LED default state/trigger.
