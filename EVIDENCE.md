@@ -2145,3 +2145,47 @@ postmarketos-mkinitfs`, `apk add`/`del` all exit 0). `build-pmos.sh` now adds th
 placeholder to new images with debugfs (dry-run on a copy of the current image:
 fsck clean). The phone has the placeholder and an initramfs in /boot now; they
 could be deleted but would be regenerated.
+
+## 35. Wi-Fi: what the chip is and what mainline has (2026-10-29, investigation only, no code)
+
+**Chip: Qualcomm QCA9377 (Rome-TF family) Wi-Fi/Bluetooth combo, Wi-Fi over SDIO.** Not
+Broadcom. Evidence in the vendor tree (`upstream/k7880`):
+- `exynos7880-a5y17lte_eur_open_05.dts` (and _00): node `wlan { compatible =
+  "qcom,cnss_sdio"; wlan-en-gpio = <&gpd3 6>; wlan-host-wake = <&gpa2 2>;
+  vdd-wlan-supply = <&cnss_dcdc_en>; }`, regulator-fixed `cnss_dcdc_en` on gpd3-3
+  (startup 4 ms), and `bluetooth { compatible = "qca,qca6174"; BT_EN gpd4-2, BT_WAKE
+  gpd5-1, BT_HOST_WAKE gpa1-6; same vdd-wlan supply }`.
+- `hybris-a5y17lte_defconfig`: `CONFIG_WLAN_QCA9377_DUAL_BDF=3`, `CONFIG_QCA_CLD_WLAN=m`
+  (qcacld-2.0).
+- The original SYSTEM backup (`~/a5-backup/SYSTEM-p19.img`, read with debugfs) has
+  `/etc/firmware/{qwlan30.bin, qwlan30_ibss.bin, bdwlan30.bin (8124 B),
+  bdwlan30_OLD.bin, bdwlan32.bin, otp30.bin, Data.msc, nvm_tlv_tf_1.1.bin,
+  rampatch_tlv_tf_1.1.tlv}` and `/vendor/etc/wifi/{indoorchannel.info, wpa_supplicant*.conf}`:
+  Qualcomm Rome firmware and BT patch/NVM files.
+- SDIO host: `dwmmc1@13550000` (`mshc1`), 4-bit, pins sd1_clk gpr2-0, sd1_cmd gpr2-1,
+  sd1_bus1 gpr3-0, sd1_bus4 gpr3-1..3 (FSYS pin controller `pinctrl@13750000`, bank
+  gpr*, already in the pin driver as pin-controller 4), sdr104 / use-fine-tuning in the
+  vendor DT, `card-detect-type-external`.
+
+**Mainline v7.2 support:**
+- `drivers/net/wireless/ath/ath10k/sdio.c`: `ath10k_sdio` with `SDIO_DEVICE_ID_ATHEROS_QCA9377`
+  (0x0701) and AR6005 (0x050A); the driver forces `dev_id = QCA9377_1_0_DEVICE_ID` and
+  chip_id 0 ("don't know yet how to get chip_id with SDIO"), high-latency mode.
+- Firmware in linux-firmware (the PC has it): `ath10k/QCA9377/hw1.0/firmware-sdio-5.bin`
+  (390 KB zst), `board.bin` / `board-2.bin`. Samsung's own `bdwlan30.bin` could serve
+  as board data if the generic one does not fit this module (unverified).
+- Bluetooth (separate, later): `drivers/bluetooth/hci_qca.c` knows `qcom,qca6174-bt`; the
+  vendor files are the Rome-TF 1.1 patch (`rampatch_tlv_tf_1.1.tlv`, `nvm_tlv_tf_1.1.bin`).
+
+**Not yet in our DT:** the FSYS pin controller node and its sd1 pin states, `mmc1` (CMU_FSYS
+clocks exist: mmc0 already uses the same block), the WLAN_EN gpio (gpd3-6), the DCDC_EN
+regulator (gpd3-3), the host-wake interrupt (gpa2-2), maybe a 32 kHz sleep clock
+(the vendor `cnss` stack is not mainline; whether the S2MPU05's 32 kHz output must be on is
+unknown), `CONFIG_ATH10K`, `CONFIG_ATH10K_SDIO`, `CONFIG_MMC` SDIO support, `CFG80211`,
+`MAC80211`, and the firmware in the rootfs (linux-firmware-ath10k).
+
+**Risks:** ath10k SDIO support is little used and "experimental" (no chip_id, high-latency
+mode, known low throughput); the QCA9377 hw1.1 (Rome-TF 1.1) revision named by the BT
+files may not match the hw1.0 firmware; the board data may need Samsung's file. Safe first
+step: DT + kernel config only, boot, read `dmesg`/`/sys/bus/sdio/devices` to see the SDIO
+ID and ath10k's complaints; WLAN_EN/DCDC_EN are only GPIO writes.
