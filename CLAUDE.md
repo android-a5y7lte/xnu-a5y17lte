@@ -135,6 +135,12 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   register files and the S6E3FA3 panel driver read-only (nothing copied). Plan: DECON take-over DRM driver first,
   then DSIM + panel (brightness, power, AOD). AOD exists on this phone (ALPM/HLPM panel modes).
 - BACKLOG (Jimmy): double-tap-to-wake with the screen off (touch IC wake mode, needs the panel/DECON work and suspend).
+- BACKLOG (Jimmy, 2026-10-30): battery (fuel gauge and charger; Phosh shows a red/empty battery now). Vendor DT hint:
+  the S2MU004 MFD at I2C 0x3d on the MUIC bus (i2c-gpio gpc1-0/1, IRQ gpa2-7, already used for the MUIC USB switch) contains
+  the charger, the fuel gauge and the flash/torch gpios (flash gpc0-2, torch gpc0-3); mainline v7.2 has
+  `s2mu005-fuel-gauge` (the next chip) but nothing for the S2MU004, so this is a new MFD + charger + fuel-gauge
+  driver set, with the battery profile (capacity, curves) to get from the vendor sources; power_supply
+  also feeds the Phosh battery icon and charge status; ties into the MUIC (cable detection).
 - BACKLOG (Jimmy, 2026-10-30): Bluetooth. The QCA9377 combo's Bluetooth side: vendor DT `bluetooth { compatible =
   "qca,qca6174"; BT_EN gpd4-2, BT_WAKE gpd5-1, BT_HOST_WAKE gpa1-6 }`, powered with the Wi-Fi supply
   (cnss_dcdc_en); firmware files in the SYSTEM backup: `rampatch_tlv_tf_1.1.tlv`, `nvm_tlv_tf_1.1.bin`; mainline
