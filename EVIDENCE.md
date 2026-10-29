@@ -2216,3 +2216,23 @@ Then `ath10k_sdio: unable to enable sdio function: -5`, `could not power on hif 
 interface answers without the DCDC, the chip core does not. WLAN_EN (gpd3-6) is high
 (the pwrseq released it). Also: `cfg80211: failed to load regulatory.db` (rootfs file,
 needed later). Fix in `m8b`: `regulator-min/max-microvolt = <3300000>` on `cnss_dcdc_en`.
+
+**m8b result (Jimmy, 2026-10-29): WI-FI WORKS (scan).** Booted fine (Phosh, touch intact).
+`cnss_dcdc_en` now enabled by the MMC core. dmesg: `ath10k_sdio mmc1:0001:1: qca9377 hw1.1 sdio
+target 0x05020001 chip_id 0x00000000`, `firmware ver WLAN.TF.1.1.1-00061-QCATFSWPZ-1 api 5
+features ignore-otp`, `failed to fetch board data for bus=sdio,vendor=0271,device=0701,...
+from ath10k/QCA9377/hw1.0/board-2.bin` then `board_file api 1` (the generic board.bin), `htt-ver
+3.32 wmi-op 4 htt-op 3 ... hwcrypto 1`. `wlan0` (permanent address 00:03:7f:50:00:01, a
+placeholder from the firmware/board data) registered; NetworkManager manages it. `nmcli dev
+wifi list` showed 5 APs on 2.4 GHz and 5 GHz: home AP (signal 89, ch 40, 5200 MHz), neighbour AP A
+(75, ch 36 / 72, ch 3), neighbour AP B (47), neighbour AP C (22). Stable over 2+ minutes. The extra
+card re-enumerations at 5.6 s and 15.8 s are ath10k powering the chip down after probing the
+firmware and up again when wlan0 comes up. Not done: connecting to a network (needs
+credentials), throughput/stability tests, the real MAC address, board data matched to the
+module (generic board.bin in use; Samsung's bdwlan30.bin is in the SYSTEM backup), regulatory.db
+(`cfg80211: failed to load regulatory.db`, a rootfs file), the host-wake interrupt and the
+32 kHz clock (neither was needed to scan), Bluetooth (UART, hci_qca, `qca,qca6174`).
+**Packaging question:** ath10k is built in and CONFIG_MODULES is off, so the firmware
+must come from the kernel: `FWEMBED=1` embeds it (works, image not committable because of the
+Qualcomm firmware); alternatives are enabling modules with the rootfs firmware package
+(`linux-firmware-ath10k`) or an initramfs firmware path.

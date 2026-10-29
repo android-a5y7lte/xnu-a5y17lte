@@ -106,6 +106,11 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   tested: Phosh, route, clock, services all come back by themselves. Boot image is
   out/a5y17lte-mainline-m6c-boot.img. Writing SYSTEM: always compare a pull-back
   on the PC (TWRP's sha256sum disagreed on >1 GiB).
+- Wi-Fi WORKS for scanning (EVIDENCE 35, 2026-10-29): QCA9377 over SDIO (mmc1), ath10k_sdio,
+  image m8b (built with FWEMBED=1: Qualcomm firmware built into the kernel, so the image is
+  NOT in git; DT/config/script are). wlan0 sees 2.4 + 5 GHz APs. Not done: connect, MAC,
+  board data, regulatory.db, firmware packaging (modules off), Bluetooth, power saving.
+  The "for next session" list below is paused while Wi-Fi is the focus.
 - NEXT (next session): (1) [done, EVIDENCE 34: empty /boot/vmlinuz placeholder, in
   build-pmos.sh and on the phone] (2) sleep-inhibitor service fails at
   boot but starts fine by hand (ordering vs elogind/dbus); (3) back/menu keys (Abov
