@@ -2386,3 +2386,14 @@ nothing. After `reboot`: 0 failed services, the service starts by itself, wlan0 
 The rootfs image on the PC does not have the service/touch-key setup yet (device package 3-r7 and the
 kernel package 7.2-r3 contain it): the next `build-pmos.sh` + SYSTEM write picks it up.
 Not checked: what Esc (back) does in Phosh.
+
+## 39. Rootfs rebuilt with the key service (2026-10-29)
+
+`./build-pmos.sh` (device package 3-r7, kernel package 7.2-r3 with patches 0008/0009):
+`build/pmos/samsung-a5y17lte-root.img`, 1500512256 B (1431 MiB), sha256 `fd3c63ce…5fe8`, e2fsck
+clean (18392 files). Verified with debugfs: `/usr/bin/a5y17lte-keyled`, `/etc/init.d/a5y17lte-keyled`
+and `/etc/conf.d/a5y17lte-keyled` (brightness 16, 1.0 s), python3, Phosh session files, ath10k modules,
+firmware, regulatory.db, the `/boot/vmlinuz` placeholder; runlevel default has a5y17lte-keyled, usbnet,
+greetd, elogind, polkit, dbus, NetworkManager, chronyd (no sleep-inhibitor, no tty1 getty). The last
+2 MiB of the image are zeros (zero them on the phone after the adb write, EVIDENCE 33/36).
+Not yet written to SYSTEM.
