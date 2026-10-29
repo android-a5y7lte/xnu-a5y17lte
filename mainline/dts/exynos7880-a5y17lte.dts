@@ -473,3 +473,42 @@
 		linux,keycodes = <KEY_APPSELECT>, <KEY_ESC>;
 	};
 };
+
+/*
+ * Display (EVIDENCE 40): S6E3FA3 panel, 1080x1920, 65x115 mm, command mode; [D] common dtsi s6e3fa3:
+ * h-porch <2 2 2> (back, front, sync), v-porch <15 3 1>, 60 Hz. Pixel clock for 60 Hz with these
+ * totals (1086 x 1939): 126342840 Hz. Only the active size has to match what S-Boot programmed.
+ */
+&decon {
+	width-mm = <65>;
+	height-mm = <115>;
+	/* untested: enabled by `DECON=1 ./build-mainline.sh` (the display driver replaces simpledrm) */
+	status = "disabled";
+
+	display-timings {
+		native-mode = <&panel_timing>;
+
+		panel_timing: timing-0 {
+			clock-frequency = <126342840>;
+			hactive = <1080>;
+			vactive = <1920>;
+			hback-porch = <2>;
+			hfront-porch = <2>;
+			hsync-len = <2>;
+			vback-porch = <15>;
+			vfront-porch = <3>;
+			vsync-len = <1>;
+		};
+	};
+};
+
+/*
+ * Vibrator (EVIDENCE 42): [D] eur_open_05.dts sec_vib { ldo_type 1 (a GPIO LDO), ldo_en = <&gpd2 3> }: the
+ * motor is a plain on/off switch on gpd2-3 (on the older revision 00 the same pin is the touch supply).
+ */
+/ {
+	vibrator {
+		compatible = "gpio-vibrator";
+		enable-gpios = <&gpd2 3 GPIO_ACTIVE_HIGH>;
+	};
+};

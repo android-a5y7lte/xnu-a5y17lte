@@ -253,6 +253,18 @@
 			interrupts = <GIC_SPI 250 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
+		/*
+		 * [D] decon_f@14830000 and its graphics DMA channel idma_g1@14822000, adopted from
+		 * the bootloader (EVIDENCE 40): no clocks, power domain or IRQ are claimed, S-Boot's
+		 * state is relied on like for the other display blocks.
+		 */
+		decon: display-controller@14830000 {
+			compatible = "samsung,exynos7880-decon";
+			reg = <0x14830000 0x10000>, <0x14822000 0x1000>;
+			reg-names = "decon", "idma";
+			status = "disabled";
+		};
+
 		/* [D] pinctrl_0: pinctrl@139F0000, wake-up EINT on SPI 16 */
 		pinctrl_alive: pinctrl@139f0000 {
 			compatible = "samsung,exynos7880-pinctrl";

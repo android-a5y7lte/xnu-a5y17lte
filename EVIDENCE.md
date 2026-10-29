@@ -2529,3 +2529,23 @@ After a session restart: color-scheme `prefer-dark`, background set, the portal 
 `org.freedesktop.appearance color-scheme = 1` (dark). The SSH-side `gsettings` needs
 `XDG_CURRENT_DESKTOP=Phosh:GNOME` in its environment to see the overrides. Open: which apps to install.
 Display driver (same day): `m10a` builds (exynos7880-decon linked in) but is not flashed; see below.
+
+## 42. Haptics and lock-screen auto-unlock (2026-10-30, Jimmy's reports)
+
+**Haptic feedback.** feedbackd (+ `feedbackd-device-themes`, default theme) is installed and running, but the
+kernel has no force-feedback device (`capabilities/ff` = 0 on all three input devices). The vendor DT
+(`eur_open_05.dts`): `sec_vib { sec_vib,ldo_type = <1>; sec_vib,ldo_en = <&gpd2 3 1>; max_timeout 10000 }`, a plain
+on/off motor behind a GPIO (on revision 00 the same pin is the touch supply, `vtouch_3.3v`; our phone has
+the rev>=05 wiring). Mainline has `gpio-vibra` (`compatible = "gpio-vibrator"`, `enable-gpios`, optional
+`vcc-supply`; a force-feedback device through `INPUT_FF_MEMLESS`), which feedbackd can drive. Image `m9d`:
+DT node `vibrator` (enable gpd2-3) and `CONFIG_INPUT_MISC=y` + `CONFIG_INPUT_GPIO_VIBRA=y` (the first build
+silently lacked the driver: INPUT_MISC was off). The display node is now disabled by default
+(`DECON=1 ./build-mainline.sh` enables the DECON hand-off driver, which stays untested). Limits: an
+on/off motor has no strength control, so feedbackd's strength/duration profiles become plain pulses.
+**Auto-unlock on the lock screen.** The Phosh 0.58 lock screen has an entry and an "Unlock" button
+(`btn_submit`, enabled once something is typed); the only gsettings keys are `shuffle-keypad` and
+`require-unlock`. There is no auto-submit option. Submitting on every digit would be wrong (each wrong
+attempt counts as a failed PAM login), so the safe design is a Phosh patch that submits automatically once
+the entry reaches a configured PIN length (a new gsetting, 0 = off), 6 for the current passcode. That
+needs a patched `phosh` package (the aport builds with meson; the C change is in `src/lockscreen.c`,
+`input_changed_cb`).

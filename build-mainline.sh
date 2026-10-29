@@ -50,6 +50,8 @@ if [ "$(git -C "$LINUX" rev-parse --abbrev-ref HEAD)" != a5y17lte ]; then
 	done
 fi
 cp "$ML"/dts/exynos7880*.dtsi "$ML"/dts/exynos7880-a5y17lte.dts "$LINUX/arch/arm64/boot/dts/exynos/"
+# DECON=1: use the Exynos7880 DECON hand-off display driver instead of simpledrm (EVIDENCE 40, untested)
+[ -z "${DECON:-}" ] || printf '\n&decon { status = "okay"; };\n' >> "$LINUX/arch/arm64/boot/dts/exynos/exynos7880-a5y17lte.dts"
 grep -q exynos7880-a5y17lte "$LINUX/arch/arm64/boot/dts/exynos/Makefile" || \
 	sed -i 's/^\(\texynos7870-on7xelte.dtb\t\t\\\)$/\1\n\texynos7880-a5y17lte.dtb\t\t\\/' \
 		"$LINUX/arch/arm64/boot/dts/exynos/Makefile"
