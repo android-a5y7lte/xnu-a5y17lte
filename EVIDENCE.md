@@ -2118,3 +2118,15 @@ inittab; resolv.conf 1.1.1.1/9.9.9.9; /usr/bin/a5-phosh-session, /etc/phosh/phoc
 /etc/greetd/config.toml (autologin `user`), phoc, phosh, squeekboard, swrast
 Mesa, agreety, evtest, i2c-tools. (The `mkinitfs` apk trigger issue on a
 running phone is still open.)
+
+**Rootfs written to SYSTEM (2026-10-29, Jimmy OK'd, TWRP):** `adb exec-in "dd of=by-name/SYSTEM
+bs=1M conv=fsync" < samsung-a5y17lte-root.img` (7.5 min). Read-back (`adb exec-out dd
+bs=1M count=1415`, hashed on the PC) differed from the image in exactly the last
+~880 KB, twice, identically: that tail of the image is zeros (free space), and the
+phone kept its old data there (adb's stream does not deliver the trailing zero
+run). Fixed by zeroing the last MiB on the phone (`dd if=/dev/zero ... seek=1414
+count=1`). Final check: the first 1415 MiB of SYSTEM read back, sha256
+`fee7ccdb01ca…4d52` = the image, `cmp` 0 differences. Do not use TWRP's own
+sha256sum on >1 GiB ranges as the only check (it disagreed with the PC).
+Lesson for any later SYSTEM write: pull it back and compare on the PC.
+Next: boot (m6c boot image + this rootfs), grow with `ext4-grow`, check Phosh.
