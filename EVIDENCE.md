@@ -2462,3 +2462,51 @@ fits AOD; (3) the touch IC advertises it in the vendor DT (`zinitix,aod`, `zinit
 while the screen shows only the AOD clock), so our Zinitix setup may later want its wake/idle
 modes, although the mainline driver has none; (4) mainline has no AOD support at all, so
 this is a feature for after the basic display driver works. Not in the vendor DT otherwise (grep).
+
+**Vendor sources read read-only (Jimmy OK'd, 2026-10-30; from the Timeshift copy of the Sailfish tree,
+`kernel/samsung/universal7880/drivers/video/fbdev/exynos/decon_7880/`; nothing copied into the repo):**
+`decon_reg_7880.c` + `regs-decon.h` (DECON register driver) and the panel files
+`panels/s6e3fa3_a5y17_param.h`, `panels/s6e3fa3_a7y17_lcd_ctrl.c` (only the A7 control file exists; A5 has the
+param and dynamic-AID headers).
+
+**DECON_F register map (offsets from 0x14830000):** GLOBAL_CONTROL 0x00 (bit28 SRESET, bit8 1 = I80/command
+mode, bit6 URGENT, bit5 IDLE, bit4 RUN, bit1 DECON_EN, bit0 DECON_EN_F), INTERRUPT_ENABLE 0x40 / PENDING 0x48
+(bit28 DPU0, bit24 VSTATUS, bit12 FRAME_DONE, bit8 FIFO_LEVEL, bit0 INT_EN), SHADOW_REG_UPDATE_REQ 0x60
+(bit31 global, bit28 DPU, bit(n) window n), HW_SW_TRIG_CONTROL 0x70 (bit12 AUTO_MASK_TRIG, bit8 SW_TRIG,
+bit5 HW_TRIG_MASK, bit4 HW_TRIG_EN), DISPIF0_DISPIF1_CONTROL 0x80 (bit4 FREE_RUN, [13:12] underrun scheme,
+[10:8] RGB order), DISPIF0 timing 0x90..0x9c, DISPIF0 size 0xa0 (height<<16|width) and 0xa4 (pixel count),
+CLOCK_CONTROL_0 0xf0 (mask 0xF31000FF), VCLK divider 0xf4, blender BG size 0x110/0x114, per-window block
+WIN_CONTROL(n) = 0x130 + 0x20*n (EN bit0, MAPCOLOR bit1, CHMAP [14:12], alphas), +0x4 START_POSITION,
++0x8 END_POSITION, +0xc COLORMAP, +0x10 START_TIME, +0x14 PIXEL_COUNT, DATA_PATH_CONTROL 0x230, splitter
+0x240.., FRAME_FIFO 0x24c.., FRAME_ID 0x2a0, shadow copy at +0x7000. Window channel map: IDMA_G1 = 0,
+IDMA_G2 = 1, IDMA_G0 = 2, IDMA_VG0 = 3. The vendor `decon_reg_init_probe()` is the bootloader hand-off path
+(keeps what S-Boot started, only re-writes the registers); command mode uses HW trigger, "disable" =
+mask bit set, "enable" = unmask.
+
+**Live state decoded against that map (phone, S-Boot's setup):** command mode, running; HW trigger enabled and
+unmasked (0x70 = 0x10); interrupts enabled (0x40 = 0x11101101); window 0 enabled, CHMAP 0 = IDMA_G1,
+window 1920x1080 (end 0x077f0437), pixel count 0x1fa400; windows 1-3 idle; data path 1 (no compression,
+splitter bypass); IDMA_G1 at 0x14822000: size 0x07800438 and **frame buffer address 0x67000000 at +0x74**;
+IDMA_G0, G2, VG0 idle. Pipeline: 0x67000000 -> IDMA_G1 -> window 0 -> DISPIF0 -> DSIM0 -> panel.
+
+**S6E3FA3 panel (vendor control driver):** power on = sleep out (0x11), 20 ms, test keys (F0, FC) on, then
+common settings (OSC/FFC, PCD, ERR_FG, AVC, partial mode and area), brightness, test keys off, TE on, 80 ms;
+display on (0x29), 10 ms, normal mode on (0x13); power off = display off, 10 ms, sleep in (0x10), 150 ms.
+**Brightness is NOT a simple DCS 0x51:** it is Samsung "dynamic AID": per-level gamma (computed from the
+panel's own MTP calibration read over DSI, 0xC8-style, plus HBM tables), AID/aperture, TSET (temperature),
+ELVSS, ACL/OPR, all written between test keys and followed by a gamma update (F7). **AOD** = ALPM/HLPM
+modes (alpm doze: ALPM/HLPM select 0.2 nit or 60 nit, source-load-enable, gamma update). DSI helpers
+used: DCS short write (1/2 bytes), DCS long write, DCS read.
+
+**Sizing for a mainline display driver (rough):** (1) a DECON "take-over" DRM driver: CRTC and one plane
+(window 0 / IDMA_G1: update the base at IDMA +0x74, shadow update request, HW-TE trigger handling, vblank from the
+frame-done interrupt), about 600-900 lines; (2) 7880 glue for samsung-dsim; (3) an S6E3FA3 panel driver with
+the init sequence, power (LCD regulators + reset gpd3-4) and a dynamic-AID brightness implementation (or fixed
+tables), about 500 lines plus tables; (4) DT, clock stand-ins, PMIC LDOs for LCD_3P0/LCD_1P8. A sensible order:
+first the DECON driver alone (same behaviour as simpledrm, but with the right physical size 65x115 mm,
+vblank, page flipping), later DSIM + panel for brightness, power and AOD.
+
+**Backlog (Jimmy, 2026-10-30): double-tap-to-wake with the screen off.** Needs: the touch IC's low-power
+"wake" mode (the vendor DT's `zinitix,aod`/`zinitix,spay` flags; the mainline Zinitix driver has none), a
+way to keep the IC scanning while suspended or blanked, and a wake path (the IC interrupt on gpa0-5 is already a
+wake-capable EINT bank) plus display power-on; depends on the panel/DECON work and on suspend.

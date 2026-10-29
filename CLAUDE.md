@@ -129,7 +129,13 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   (in git). The rootfs IMAGE (build/pmos, fd3c63ce…5fe8, device pkg 3-r7, kernel pkg 7.2-r3) has the
   service and is ON the phone (EVIDENCE 39): written, verified by pull-back, grown to 4.6G, reboot-tested.
 - sleep-inhibitor FIXED (EVIDENCE 37): no CONFIG_SUSPEND, so it is out of the default runlevel.
-- NEXT: (1) backlight control (screen brightness; no backlight device yet, "No backlight"
+- DISPLAY SURVEY DONE (EVIDENCE 40): DSIM is samsung-dsim-compatible (Exynos7870 offsets), DECON_F is a
+  register family mainline lacks (new driver; map decoded in EVIDENCE 40), panel S6E3FA3 brightness is Samsung
+  dynamic-AID (not DCS 0x51); backlight comes with the display driver. Jimmy allowed reading the vendor DECON
+  register files and the S6E3FA3 panel driver read-only (nothing copied). Plan: DECON take-over DRM driver first,
+  then DSIM + panel (brightness, power, AOD). AOD exists on this phone (ALPM/HLPM panel modes).
+- BACKLOG (Jimmy): double-tap-to-wake with the screen off (touch IC wake mode, needs the panel/DECON work and suspend).
+- NEXT: (1) the display driver (was "backlight control") (screen brightness; no backlight device yet, "No backlight"
   in the phoc log); (2) then the real DECON/DSI display driver (roadmap, with the CMU clock
   driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,
   Bluetooth).
