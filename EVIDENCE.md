@@ -2409,3 +2409,46 @@ service started by itself (enabled in the image), 0 failed services, ath10k load
 to the home AP, then `ext4-grow / 1241088` (4.6G, 3.2G free). After `reboot`: 4.6G kept, 0 failed
 services, a5y17lte-keyled started, wlan0 connected (192.168.2.31) with the USB route as fallback at
 metric 700, 2/2 pings through wlan0 about 10 ms, phoc running, key LED dark at rest.
+
+## 40. Display survey (2026-10-30, read-only; nothing flashed or changed)
+
+**Panel** (vendor `exynos7880-a5y17lte_common.dtsi`, `s6e3fa3`): Samsung S6E3FA3 AMOLED,
+1080x1920, MIPI **command mode**, 4 lanes, 65x115 mm, 60 Hz, porches h 2/2/2 v 15/3/1, DSI HS clock
+997 Mbit/s (PMS 3/230/1 from the 26 MHz crystal), escape clock 16 MHz; DSIM0 only (DSIM1 unused);
+reset gpd3-4; power via regulators `LCD_3P0` and `LCD_1P8` (PMIC LDOs). Brightness of an AMOLED is a
+DCS command to the panel: there is no backlight chip or PWM, which is why Phosh logs "No backlight".
+
+**Blocks** (vendor `exynos7880.dtsi`; same addresses as mainline's Exynos7870 DT): DSIM
+`0x14800000` (SPI 207), DECON_F `0x14830000` (SPI 201-206, 360), four VPP/IDMA blocks idma_g0/g1/g2/vg0 at
+`0x14821000/22000/23000/24000`, sysmmu `0x14860000` (SPI 193), display pin controller `0x148c0000`
+(SPI 68), CMU_DISPAUD `0x148d0000`, MIPI PHY control `0x148f100c`, power domain `pd_disp`.
+
+**Mainline fit, by block:**
+- **DSIM: reusable.** `samsung-dsim` has Exynos7870 data (`exynos7870_reg_ofs`); the live DSIM
+  registers read from the phone fit that map exactly: MDRESOL (`0x20`) = `0x07800438`
+  (1920x1080), CONFIG (`0x30`) = `0xa480707f`, PLLCTRL (`0x94`) = `0x00806731`, PHYTIMING (`0xb4`..)
+  = `0x082b0d09 00090f0c`. A 7880 compatible and binding patch would be enough.
+- **DECON: NOT supported by mainline.** The live DECON registers (`0x14830000`): `0x00` = `0x113`,
+  `0x04` = 1, `0x30` = `0x20000000`, `0x40` = `0x11101101`, `0x70` = `0x10` (the HW trigger we set in
+  `a5-diag panel`), `0xa0` = `0x07800438` (1920x1080), `0xa4` = `0x001fa400` (pixel count),
+  `0xc0..0xd8` small per-window values, `0xf0` = `0xf31000ff`; everything from `0x600` up is zero.
+  `exynos7_drm_decon.c` (also used for the Exynos7870) expects VIDCON0/VIDTCON at `0x00/0x610/0x704/
+  0x710` and `exynos5433_drm_decon.c` has SHADOWCON at `0xa0` and TRIGCON at `0x2040`; neither
+  matches. It is the vendor "exynos8-decon" family (ip_ver 2), so a **new DRM driver** is needed.
+- **Panel: derivable.** `panel-samsung-s6e3fa7.c` is a close sibling (1080x1920 AMOLED, DCS
+  brightness). The S6E3FA3 init and brightness sequences are in the vendor panel driver, which lives in the
+  Sailfish tree.
+- **Clocks / power:** CMU_DISPAUD exists for the 7870 in mainline (`exynos7870-cmu-dispaud`); whether
+  the 7880 block is register-compatible (offsets from S5E7880-cmusfr.h) is still to be checked.
+  S-Boot leaves the display powered and clocked (the panel works), so fixed-clock/ignore-unused
+  stand-ins are possible as for the SD card and USB.
+
+**Why backlight control is not a separate job:** it is a panel command over DSI. A DSI host driver
+(samsung-dsim) can only run behind a DRM encoder/CRTC chain, and re-initialising the DSIM
+would disrupt the working S-Boot link. So brightness arrives with the display driver, or via a
+userspace register hack with an unknown command set.
+
+**Open questions for the next step:** DECON register meanings beyond the above (needs the vendor
+register driver or careful probing); how S-Boot's framebuffer reaches the DECON (which IDMA, IOMMU
+on or off); the S6E3FA3 brightness/init commands; the PMIC LDO numbers behind LCD_3P0/LCD_1P8 (the PMIC
+driver is live now).
