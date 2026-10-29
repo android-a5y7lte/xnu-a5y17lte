@@ -2267,3 +2267,16 @@ wlan0 appeared and NetworkManager rejoined "home AP" on its own. After `reboot`,
 ath10k_sdio automatically, wlan0 connected by itself (192.168.2.29), 2/2 pings through wlan0
 at about 11 ms, Phosh up. The board data is still the generic board.bin (board-2.bin has no
 entry for this module). The live a5y17lte-usbnet is updated to metric 700.
+
+## 36. Rootfs with Wi-Fi as modules written to SYSTEM (2026-10-29)
+
+`./build-pmos.sh` (device package 3-r5 + kernel package 7.2-r2 with modules): image
+`build/pmos/samsung-a5y17lte-root.img`, 1500512256 B (1431 MiB), sha256 `4a511b94…db38`,
+e2fsck clean (18389 files). The build checks again added the polkit runlevel link and the
+`/boot/vmlinuz` placeholder. Verified in the image with debugfs: ath10k_sdio.ko, cfg80211.ko,
+modules.dep, `firmware-sdio-5.bin.zst`, regulatory.db, iw, a5-phosh-session, usbnet metric 700,
+no build/source links in /usr/lib/modules/7.2.0-a5y17lte. Written from TWRP with `adb exec-in dd
+bs=1M conv=fsync` (7 min), then the last 2 MiB zeroed on the phone (the image's tail is zeros, which
+adb's stream does not deliver; see EVIDENCE 33), then pulled back (1431 MiB) and compared on the PC:
+`cmp` 0 differences, sha256 `4a511b94…db38` = the image. Boot image on the phone: m8c.
+Next: boot, grow with ext4-grow (1241088 blocks), check Wi-Fi/Phosh/touch, reboot test.
