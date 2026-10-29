@@ -2299,3 +2299,17 @@ reverted). Fix: take it out of the default runlevel (`rc-update del sleep-inhibi
 the device package post-install/post-upgrade (3-r6) and in `build-pmos.sh`'s image check; live
 phone done and reboot-tested: 0 failed services. Bring it back together with suspend support
 (`CONFIG_SUSPEND`, which needs the PMIC/wake sources worked out first).
+
+## 38. Home, back and menu keys (2026-10-29)
+
+**Home** (gpio-keys, gpa1-7): arrives in the kernel as `KEY_HOMEPAGE` (172), 8 presses ->
+8 down/up pairs (evtest); volume keys fine; back and menu give no events at all.
+Phosh does nothing with it: its binary handles `Super_L`/`Super_R` (overview) plus the power and
+volume keys; gsd-media-keys only binds `XF86Explorer` (home folder) and `XF86WWW`. Jimmy's
+choice: `KEY_LEFTMETA` in the DT (image `m9a`), to be checked on the phone.
+**Back/menu**: an Abov A96T316 touch-key MCU (vendor `abov,mc96ft18xx`) at I2C 0x20 on a
+bit-banged bus (vendor i2c@20: SDA gpd4-5, SCL gpd4-3), IRQ gpa1-4, firmware
+`abov/a96t316_a5y17.fw` (only used for updates), `abov,boot-on-ldo`. Mainline has no driver; the
+vendor driver (`abov_touchkey_ft1804.c`) only exists in the Sailfish tree, which the project rules
+keep us out of, so Jimmy chose empirical probing (as for the touch IC): `m9a` adds an `i2c-gpio-tkey`
+bus, no driver; supply switched on from userspace via the PMIC bus.

@@ -51,8 +51,10 @@
 		pinctrl-0 = <&key_power &key_voldown &key_volup &key_home>;
 
 		key-home {
-			linux,code = <KEY_HOMEPAGE>;
-			label = "gpio-keys: KEY_HOMEPAGE";
+			/* Phosh binds Super (toggles the overview) and nothing on XF86HomePage
+			 * (EVIDENCE 38) */
+			linux,code = <KEY_LEFTMETA>;
+			label = "gpio-keys: KEY_LEFTMETA (Home)";
 			gpios = <&gpa1 7 GPIO_ACTIVE_LOW>;
 			wakeup-source;
 		};
@@ -129,6 +131,20 @@
 		compatible = "i2c-gpio";
 		sda-gpios = <&gpm0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		scl-gpios = <&gpm0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	/*
+	 * Touch-key MCU bring-up (EVIDENCE 38): [D] common dtsi i2c@20 (i2c-gpio): SDA gpd4-5, SCL
+	 * gpd4-3, "abov,mc96ft18xx" at 0x20, IRQ gpa1-4. Driver-less: userspace probes it with
+	 * i2c-tools; its supply (probably a PMIC LDO) is switched on from userspace for now.
+	 */
+	i2c_tkey: i2c-gpio-tkey {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpd4 5 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpd4 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		i2c-gpio,delay-us = <5>;
 		#address-cells = <1>;
 		#size-cells = <0>;
