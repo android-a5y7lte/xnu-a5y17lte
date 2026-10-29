@@ -106,11 +106,18 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   tested: Phosh, route, clock, services all come back by themselves. Boot image is
   out/a5y17lte-mainline-m6c-boot.img. Writing SYSTEM: always compare a pull-back
   on the PC (TWRP's sha256sum disagreed on >1 GiB).
-- Wi-Fi WORKS for scanning (EVIDENCE 35, 2026-10-29): QCA9377 over SDIO (mmc1), ath10k_sdio,
-  image m8b (built with FWEMBED=1: Qualcomm firmware built into the kernel, so the image is
-  NOT in git; DT/config/script are). wlan0 sees 2.4 + 5 GHz APs. Not done: connect, MAC,
-  board data, regulatory.db, firmware packaging (modules off), Bluetooth, power saving.
-  The "for next session" list below is paused while Wi-Fi is the focus.
+- WI-FI WORKS (EVIDENCE 35-36, 2026-10-29): Qualcomm QCA9377 over SDIO (mmc1), ath10k_sdio as a
+  MODULE (CONFIG_MODULES=y; cfg80211, mac80211, ath10k are modules, rest built in), firmware from
+  linux-firmware-ath10k and wireless-regdb in the rootfs. Boot image out/a5y17lte-mainline-m8c-boot.img
+  (in git, no embedded firmware); rootfs built by build-pmos.sh (device package 3-r5, kernel package
+  7.2-r2, 4a511b94…db38), written, grown to 4.6G and reboot-tested. Phone joined a 5 GHz AP
+  (Jimmy entered the password in Phosh), udev autoloads the module, NM autoconnects, Wi-Fi is the
+  default route and the USB/PC route is the fallback (metric 700). Not done: real MAC address (placeholder
+  00:03:7f:50:00:01), board data (generic board.bin; Samsung's bdwlan30.bin is in the SYSTEM backup),
+  host-wake IRQ, throughput/stability tests, power saving, Bluetooth (UART, hci_qca). The first
+  boot after flashing m8c had no USB link (PC: error -71 enumeration), fixed by replug + restart;
+  cause unknown. FWEMBED=1 in build-mainline.sh still embeds the firmware (image then not for git).
+  The "for next session" list below stays paused until Jimmy resumes it.
 - NEXT (next session): (1) [done, EVIDENCE 34: empty /boot/vmlinuz placeholder, in
   build-pmos.sh and on the phone] (2) sleep-inhibitor service fails at
   boot but starts fine by hand (ordering vs elogind/dbus); (3) back/menu keys (Abov

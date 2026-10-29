@@ -2280,3 +2280,10 @@ bs=1M conv=fsync` (7 min), then the last 2 MiB zeroed on the phone (the image's 
 adb's stream does not deliver; see EVIDENCE 33), then pulled back (1431 MiB) and compared on the PC:
 `cmp` 0 differences, sha256 `4a511b94…db38` = the image. Boot image on the phone: m8c.
 Next: boot, grow with ext4-grow (1241088 blocks), check Wi-Fi/Phosh/touch, reboot test.
+
+**Booted, grown, reboot-tested (2026-10-29):** the new rootfs came up with Wi-Fi by itself
+(ath10k_sdio autoloaded by udev, wlan0 connected to "home AP", 192.168.2.30), the USB route
+as fallback at metric 700, then `ext4-grow / 1241088` (4.6G, 3.2G free). After `reboot`: 4.6G
+kept, ath10k loaded, wlan0 connected, 2/2 pings through wlan0 about 10 ms, phoc and squeekboard
+running; only `sleep-inhibitor` shows failed (known, boot-time ordering). The board-data
+message (`failed to fetch board data ... board-2.bin`, then generic board.bin) is expected.
