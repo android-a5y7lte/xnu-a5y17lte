@@ -2559,3 +2559,15 @@ Phosh-native adaptive browser and much lighter under software rendering). They a
 `extra_packages` for fresh rootfs builds. The mkinitfs `boot-deploy` step now also complains that
 `exynos/exynos7880-a5y17lte.dtb` is missing from `/boot/dtbs` (not fatal, apk still finishes OK); an
 empty placeholder fixes it, added on the phone and in `build-pmos.sh`.
+
+## 44. Is USB-C DisplayPort Alt Mode wired? (2026-10-30, Jimmy's check-first request)
+
+**No.** From the vendor DT (`exynos7880.dtsi`, `..._common.dtsi`, `..._eur_open_05.dts`): (1) no DisplayPort, HDMI or MHL
+controller or PHY node anywhere (the only trace is a generic comment on the DECON `out_type` property, "0: DSI, 1: eDP,
+2: HDMI", of which only DSI is used); (2) no USB-C PD/CC controller (no ccic/pdic/typec/S2MM001 nodes): the
+port is handled by the S2MU004 MUIC (already used for the USB D+/D- switch, EVIDENCE 18) which has no alt-mode
+mux; (3) the USB controller is limited to `maximum-speed = "high-speed"` (USB 2.0; the SuperSpeed PHY of the
+generic DWC3 binding is not used), so there are no SuperSpeed lanes to repurpose for DisplayPort; (4) the DECON has
+one DSI output (dsim0) and no external-display path in the live setup (`dsi_mode = <1>`, windows 1-3 idle). The
+Galaxy A5 (2017) is a USB 2.0 Type-C phone without video out or DeX. What is possible: USB host/OTG for a
+keyboard, mouse or storage (`dr_mode = "otg"`, VBUS from LDO3), and wireless display over the QCA9377.

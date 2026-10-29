@@ -135,6 +135,11 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   register files and the S6E3FA3 panel driver read-only (nothing copied). Plan: DECON take-over DRM driver first,
   then DSIM + panel (brightness, power, AOD). AOD exists on this phone (ALPM/HLPM panel modes).
 - BACKLOG (Jimmy): double-tap-to-wake with the screen off (touch IC wake mode, needs the panel/DECON work and suspend).
+- BACKLOG (Jimmy, 2026-10-30): DeX/Ubuntu-Touch-style desktop mode on an external screen, switching to a desktop layout
+  automatically when connected. CHECKED FIRST (EVIDENCE 44): a wired USB-C display (DisplayPort Alt Mode) is NOT possible
+  on this board (USB 2.0 only, no video-out IP, no USB-C PD/CC chip). Feasible variants: wireless display (Miracast over
+  the QCA9377's Wi-Fi P2P, or a remote-desktop/streaming approach) and a desktop-style Phosh layout when a keyboard/mouse
+  is attached over USB OTG (the port is already `dr_mode = otg`); both need the display driver and are far off.
 - BACKLOG (Jimmy, 2026-10-30): battery (fuel gauge and charger; Phosh shows a red/empty battery now). Vendor DT hint:
   the S2MU004 MFD at I2C 0x3d on the MUIC bus (i2c-gpio gpc1-0/1, IRQ gpa2-7, already used for the MUIC USB switch) contains
   the charger, the fuel gauge and the flash/torch gpios (flash gpc0-2, torch gpc0-3); mainline v7.2 has
