@@ -135,6 +135,10 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   register files and the S6E3FA3 panel driver read-only (nothing copied). Plan: DECON take-over DRM driver first,
   then DSIM + panel (brightness, power, AOD). AOD exists on this phone (ALPM/HLPM panel modes).
 - BACKLOG (Jimmy): double-tap-to-wake with the screen off (touch IC wake mode, needs the panel/DECON work and suspend).
+- BACKLOG (Jimmy, 2026-10-30): Bluetooth. The QCA9377 combo's Bluetooth side: vendor DT `bluetooth { compatible =
+  "qca,qca6174"; BT_EN gpd4-2, BT_WAKE gpd5-1, BT_HOST_WAKE gpa1-6 }`, powered with the Wi-Fi supply
+  (cnss_dcdc_en); firmware files in the SYSTEM backup: `rampatch_tlv_tf_1.1.tlv`, `nvm_tlv_tf_1.1.bin`; mainline
+  `hci_qca` (`qcom,qca6174-bt`) over a UART (which one is still to find), Rome-TF 1.1 firmware naming to check.
 - BACKLOG (Jimmy, 2026-10-30): all sensors (accelerometer, proximity, gyroscope, light, compass, ...). Vendor DT
   hint: they sit behind a sensor-hub MCU, `ssp,STM32F` on SPI 2 (spi@13930000, MISO/MOSI/SCK/SSN pins, reset
   `MCU_RST_N(SSP_RST)` on gpf4-2); mainline has no SSP/sensor-hub driver, so this is one hub driver
