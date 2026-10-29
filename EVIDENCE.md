@@ -2198,7 +2198,7 @@ gpr0-gpr4, sd1 pin states as in the Exynos7870 boards using the same pins), `mmc
 clock gated the controller will time out), `cnss_dcdc_en` regulator-fixed (gpd3-3) as vmmc, a
 `mmc-pwrseq-simple` that releases WLAN_EN (gpd3-6) 100 ms after power-on, 4-bit,
 `cap-sdio-irq`, max 25 MHz. Kernel config: CFG80211, MAC80211, ATH10K, ATH10K_SDIO,
-MMC_PWRSEQ_SIMPLE, built in (CONFIG_MODULES is off). The Qualcomm firmware
+PWRSEQ_SIMPLE, built in (CONFIG_MODULES is off). The Qualcomm firmware
 (`firmware-sdio-5.bin`, `board-2.bin`, `board.bin` from the PC's linux-firmware) is built
 into the image with `CONFIG_EXTRA_FIRMWARE` only when `FWEMBED=1`, so the probe runs
 before the rootfs exists; that image is therefore NOT committed. Reading it: `dmesg | grep
