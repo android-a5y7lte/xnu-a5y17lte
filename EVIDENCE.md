@@ -2403,3 +2403,9 @@ first try failed at once because adb had not yet enumerated TWRP, nothing was wr
 zeroed on the phone, pulled back 1431 MiB and compared on the PC: `cmp` 0 differences, sha256
 `fd3c63ce…5fe8` = the image. Next: boot, grow with ext4-grow, re-enter the Wi-Fi password, check the
 key service and a reboot.
+
+**Booted, grown, reboot-tested (2026-10-30):** the rebuilt rootfs (fd3c63ce…5fe8) came up with the key
+service started by itself (enabled in the image), 0 failed services, ath10k loaded, wlan0 connected
+to the home AP, then `ext4-grow / 1241088` (4.6G, 3.2G free). After `reboot`: 4.6G kept, 0 failed
+services, a5y17lte-keyled started, wlan0 connected (192.168.2.31) with the USB route as fallback at
+metric 700, 2/2 pings through wlan0 about 10 ms, phoc running, key LED dark at rest.
