@@ -2510,3 +2510,22 @@ vblank, page flipping), later DSIM + panel for brightness, power and AOD.
 "wake" mode (the vendor DT's `zinitix,aod`/`zinitix,spay` flags; the mainline Zinitix driver has none), a
 way to keep the IC scanning while suspended or blanked, and a wake path (the IC interrupt on gpa0-5 is already a
 wake-capable EINT bank) plus display power-on; depends on the panel/DECON work and on suspend.
+
+## 41. Phosh polish: dark mode and the black home screen (2026-10-30, Jimmy's reports)
+
+**Causes found on the phone.** (1) The session ran with `XDG_CURRENT_DESKTOP=GNOME`. Phosh's defaults
+(`00_mobi.Phosh.gschema.override`: `color-scheme='prefer-dark'`, the wallpaper, on-screen keyboard,
+idle delay) are overrides for the `Phosh` desktop, so none applied: `gsettings` said
+`color-scheme 'default'` and the background was the generic `adwaita-l.jxl`. (2) The wallpaper files
+(`/usr/share/backgrounds/gnome/*`) were never installed (and `.jxl` also needs the glycin loader, not
+packaged here): the background was missing, hence black. (3) No XDG desktop portal was installed, so
+apps could not read `org.freedesktop.appearance`. (4) No regular apps are installed: the app grid only
+holds Settings panels and system helpers (no terminal, browser, editor, files, ...).
+**Fix (live, then packaged in device pkg 3-r8):** `a5-phosh-session` exports
+`XDG_CURRENT_DESKTOP=Phosh:GNOME`; `99_a5y17lte.gschema.override` points the background and lock screen at
+`/usr/share/phosh/backgrounds/byzantium-abstract-720x1440.jpg` (phosh-wallpapers); installed
+`xdg-desktop-portal`, `xdg-desktop-portal-phosh`, `phosh-wallpapers` (the package depends on them now).
+After a session restart: color-scheme `prefer-dark`, background set, the portal answers
+`org.freedesktop.appearance color-scheme = 1` (dark). The SSH-side `gsettings` needs
+`XDG_CURRENT_DESKTOP=Phosh:GNOME` in its environment to see the overrides. Open: which apps to install.
+Display driver (same day): `m10a` builds (exynos7880-decon linked in) but is not flashed; see below.

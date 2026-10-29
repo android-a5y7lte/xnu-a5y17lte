@@ -1,0 +1,10 @@
+# Galaxy A5 (2017): Phosh's own override points at gnome-backgrounds (JPEG XL/SVG files that are not
+# installed); use the wallpaper from phosh-wallpapers instead (EVIDENCE 41)
+[org.gnome.desktop.background:Phosh]
+picture-uri='file:///usr/share/phosh/backgrounds/byzantium-abstract-720x1440.jpg'
+picture-uri-dark='file:///usr/share/phosh/backgrounds/byzantium-abstract-720x1440.jpg'
+picture-options='zoom'
+
+[org.gnome.desktop.screensaver:Phosh]
+picture-uri='file:///usr/share/phosh/backgrounds/byzantium-abstract-720x1440.jpg'
+picture-options='zoom'

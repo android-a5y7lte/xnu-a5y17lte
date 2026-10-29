@@ -3,7 +3,7 @@ maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=device-samsung-a5y17lte
 pkgdesc="Samsung Galaxy A5 (2017)"
 pkgver=3
-pkgrel=7
+pkgrel=8
 url="https://github.com/android-a5y7lte/xnu-a5y17lte"
 license="MIT"
 arch="aarch64"
@@ -27,6 +27,9 @@ depends="
 	wireless-regdb
 	iw
 	python3
+	xdg-desktop-portal
+	xdg-desktop-portal-phosh
+	phosh-wallpapers
 "
 makedepends="devicepkg-dev"
 subpackages="$pkgname-openrc:openrc"
@@ -43,6 +46,7 @@ source="
 	a5y17lte-keyled
 	a5y17lte-keyled.initd
 	a5y17lte-keyled.confd
+	a5y17lte-gschema.override
 "
 
 build() {
@@ -55,6 +59,8 @@ package() {
 		"$pkgdir"/etc/NetworkManager/conf.d/90-a5y17lte-usb0.conf
 	install -Dm755 "$srcdir"/a5y17lte-usbnet "$pkgdir"/usr/bin/a5y17lte-usbnet
 	# Phosh on simpledrm (EVIDENCE 32): software rendering, autologin, scale 2
+	install -Dm644 "$srcdir"/a5y17lte-gschema.override \
+		"$pkgdir"/usr/share/glib-2.0/schemas/99_a5y17lte.gschema.override
 	install -Dm755 "$srcdir"/a5y17lte-keyled "$pkgdir"/usr/bin/a5y17lte-keyled
 	install -Dm755 "$srcdir"/a5-phosh-session "$pkgdir"/usr/bin/a5-phosh-session
 	install -Dm644 "$srcdir"/a5y17lte-greetd.toml "$pkgdir"/etc/greetd/config.toml

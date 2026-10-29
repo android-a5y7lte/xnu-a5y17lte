@@ -6,4 +6,7 @@ export WLR_RENDERER_ALLOW_SOFTWARE=1
 export GSK_RENDERER=cairo
 export MESA_LOADER_DRIVER_OVERRIDE=swrast
 export LIBGL_ALWAYS_SOFTWARE=1
+# Phosh's gsettings defaults (dark style, wallpaper, ...) are schema overrides for the
+# "Phosh" desktop, which gnome-session only names when told to (EVIDENCE 41)
+export XDG_CURRENT_DESKTOP=Phosh:GNOME
 exec phosh-session
