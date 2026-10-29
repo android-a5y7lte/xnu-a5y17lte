@@ -1,0 +1,9 @@
+#!/sbin/openrc-run
+description="Light the Home, recents and back buttons while they are pressed"
+supervisor="supervise-daemon"
+command="/usr/bin/python3"
+command_args="/usr/bin/a5y17lte-keyled --brightness ${keyled_brightness:-16} --timeout ${keyled_timeout:-1.0}"
+
+depend() {
+	after udev-postmount
+}

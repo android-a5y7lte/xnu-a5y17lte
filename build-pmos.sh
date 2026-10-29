@@ -115,7 +115,7 @@ debugfs -R "ls /etc/runlevels/default" "$O/samsung-a5y17lte-root.img" 2>/dev/nul
 # greetd and drops the tty1 getty, but postmarketos-base's can run after it (same
 # ordering trap as hwclock/resolv.conf): check the image, fix what is missing
 IMG="$O/samsung-a5y17lte-root.img"
-for svc in elogind polkit greetd a5y17lte-usbnet; do
+for svc in elogind polkit greetd a5y17lte-usbnet a5y17lte-keyled; do
 	if ! debugfs -R "stat /etc/runlevels/default/$svc" "$IMG" 2>&1 | grep -q "Inode:"; then
 		echo "runlevel default lacks $svc: adding"
 		debugfs -w -R "symlink /etc/runlevels/default/$svc /etc/init.d/$svc" "$IMG" >/dev/null 2>&1

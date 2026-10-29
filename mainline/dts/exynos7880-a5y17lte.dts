@@ -422,7 +422,7 @@
 
 /*
  * S2MPU05 PMIC (EVIDENCE 38): [D] hsi2c@10610000, 7-bit 0x66, interrupt gpa0-2; bit-banged on
- * gpm0-0/1 for now. Only the LDO the touch-key controller needs is described; the other rails
+ * gpm0-0/1 for now. Only the LDOs the touch-key controller needs are described; the other rails
  * keep the state S-Boot left them in (`regulator_ignore_unused` is on the command line).
  */
 &i2c_pmic {
@@ -437,6 +437,13 @@
 				regulator-name = "vtouch_2.8v";
 				regulator-min-microvolt = <2800000>;
 				regulator-max-microvolt = <2800000>;
+			};
+
+			/* [D] vtouch_3.3v (LDO35): the supply of the key backlight (EVIDENCE 38) */
+			ldo35: ldo35 {
+				regulator-name = "vtouch_3.3v";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
 			};
 		};
 	};
@@ -461,6 +468,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&tkey_irq>;
 		vdd-supply = <&ldo32>;
-		linux,keycodes = <KEY_APPSELECT>, <KEY_BACK>;
+		led-supply = <&ldo35>;
+		/* Esc is the "back" action on Wayland/GTK; recents stays APPSELECT */
+		linux,keycodes = <KEY_APPSELECT>, <KEY_ESC>;
 	};
 };

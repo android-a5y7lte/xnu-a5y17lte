@@ -1,6 +1,6 @@
-From 853de49a8715b8922e9cc2e4f28433f4bcd1041f Mon Sep 17 00:00:00 2001
+From 91028f3eb7fdef8646fead91f41259b0b9a8911b Mon Sep 17 00:00:00 2001
 From: Jimmy <fakeandroit@gmail.com>
-Date: Thu, 29 Oct 2026 23:19:04 +0200
+Date: Thu, 29 Oct 2026 23:34:16 +0200
 Subject: [PATCH 9/9] Input: add Abov A96T316 touch-key controller driver
 
 The Abov A96T316 is a microcontroller used as a capacitive touch-key
@@ -10,9 +10,12 @@ for example in the Samsung Galaxy A5 (2017).
 The controller pulls its interrupt line low when a key event is pending
 and releases it when the status register (0x07) is read. The register
 holds two bits per key: 0b10 for a press and 0b01 for a release, with the
-recent apps key in bits 1:0 and the back key in bits 3:2. Writing 0x10 or
-0x20 to register 0 switches the key backlight on or off, which is exposed
-as an LED.
+recent apps key in bits 1:0 and the back key in bits 3:2.
+
+The key backlight is exposed as an LED. Its brightness (0 to 31) is the
+dimming level written to registers 0x08 and 0x09, and writing 0x10 or 0x20
+to register 0 switches the backlight on or off. The backlight has its own
+supply (led-supply), which is only enabled while the LED is lit.
 
 The interrupt must be level triggered (low): with a falling edge a new
 event that arrives while the line is still low is never seen.
@@ -24,8 +27,8 @@ Assisted-by: Claude:claude-sonnet-5-5
 ---
  drivers/input/keyboard/Kconfig        |  12 ++
  drivers/input/keyboard/Makefile       |   1 +
- drivers/input/keyboard/abov-a96t316.c | 164 ++++++++++++++++++++++++++
- 3 files changed, 177 insertions(+)
+ drivers/input/keyboard/abov-a96t316.c | 211 ++++++++++++++++++++++++++
+ 3 files changed, 224 insertions(+)
  create mode 100644 drivers/input/keyboard/abov-a96t316.c
 
 diff --git a/drivers/input/keyboard/Kconfig b/drivers/input/keyboard/Kconfig
@@ -65,10 +68,10 @@ index 60bb7baf8..a07423603 100644
  obj-$(CONFIG_KEYBOARD_ADP5585)		+= adp5585-keys.o
 diff --git a/drivers/input/keyboard/abov-a96t316.c b/drivers/input/keyboard/abov-a96t316.c
 new file mode 100644
-index 000000000..d75be4994
+index 000000000..60ed5b13d
 --- /dev/null
 +++ b/drivers/input/keyboard/abov-a96t316.c
-@@ -0,0 +1,164 @@
+@@ -0,0 +1,211 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Abov A96T316 capacitive touch-key controller
@@ -94,6 +97,8 @@ index 000000000..d75be4994
 +#define A96T316_REG_CMD		0x00
 +#define A96T316_REG_FW_VER	0x01
 +#define A96T316_REG_STATUS	0x07
++#define A96T316_REG_LED_RECENT	0x08	/* key backlight dimming, 1..31 */
++#define A96T316_REG_LED_BACK	0x09
 +
 +#define A96T316_CMD_LED_ON	0x10
 +#define A96T316_CMD_LED_OFF	0x20
@@ -104,12 +109,15 @@ index 000000000..d75be4994
 +#define A96T316_EVENT_RELEASE	BIT(0)
 +
 +#define A96T316_NUM_KEYS	2
++#define A96T316_LED_MAX		31
 +#define A96T316_POWER_ON_DELAY_MS	150
 +
 +struct a96t316 {
 +	struct i2c_client *client;
 +	struct input_dev *input;
 +	struct led_classdev led;
++	struct regulator *led_supply;
++	bool led_enabled;
 +	u32 keycodes[A96T316_NUM_KEYS];
 +};
 +
@@ -147,10 +155,43 @@ index 000000000..d75be4994
 +static int a96t316_led_set(struct led_classdev *led, enum led_brightness value)
 +{
 +	struct a96t316 *tk = container_of(led, struct a96t316, led);
++	struct i2c_client *client = tk->client;
++	int ret;
 +
-+	return i2c_smbus_write_byte_data(tk->client, A96T316_REG_CMD,
-+					 value ? A96T316_CMD_LED_ON :
-+						 A96T316_CMD_LED_OFF);
++	if (!value) {
++		ret = i2c_smbus_write_byte_data(client, A96T316_REG_CMD,
++						A96T316_CMD_LED_OFF);
++		if (tk->led_enabled) {
++			regulator_disable(tk->led_supply);
++			tk->led_enabled = false;
++		}
++		return ret;
++	}
++
++	if (!tk->led_enabled) {
++		ret = regulator_enable(tk->led_supply);
++		if (ret)
++			return ret;
++		tk->led_enabled = true;
++	}
++
++	ret = i2c_smbus_write_byte_data(client, A96T316_REG_LED_RECENT, value);
++	if (ret)
++		return ret;
++	ret = i2c_smbus_write_byte_data(client, A96T316_REG_LED_BACK, value);
++	if (ret)
++		return ret;
++
++	return i2c_smbus_write_byte_data(client, A96T316_REG_CMD,
++					 A96T316_CMD_LED_ON);
++}
++
++static void a96t316_led_supply_off(void *data)
++{
++	struct a96t316 *tk = data;
++
++	if (tk->led_enabled)
++		regulator_disable(tk->led_supply);
 +}
 +
 +static int a96t316_probe(struct i2c_client *client)
@@ -200,8 +241,17 @@ index 000000000..d75be4994
 +	if (ret)
 +		return dev_err_probe(dev, ret, "failed to register the input device\n");
 +
++	tk->led_supply = devm_regulator_get(dev, "led");
++	if (IS_ERR(tk->led_supply))
++		return dev_err_probe(dev, PTR_ERR(tk->led_supply),
++				     "failed to get the LED supply\n");
++
++	ret = devm_add_action_or_reset(dev, a96t316_led_supply_off, tk);
++	if (ret)
++		return ret;
++
 +	tk->led.name = "a96t316::kbd_backlight";
-+	tk->led.max_brightness = 1;
++	tk->led.max_brightness = A96T316_LED_MAX;
 +	tk->led.brightness_set_blocking = a96t316_led_set;
 +	ret = devm_led_classdev_register(dev, &tk->led);
 +	if (ret)

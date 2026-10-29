@@ -2362,3 +2362,18 @@ enabled. evtest on the new device: menu key -> KEY_APPSELECT (580), back -> KEY_
 down/up pairs 70-300 ms apart (9 presses each, no duplicates). Pending: whether the key
 backlight lights (brightness 1 written), what Phosh does with APPSELECT/BACK (nothing is bound
 by default), the LED default state/trigger.
+
+**Key backlight (2026-10-29, live tests on m9b, Jimmy watching the buttons).** Writing the LED-on
+command (reg 0x00 = 0x10) alone lights nothing. The backlight needs **PMIC LDO35**
+(`vtouch_3.3v`, 3.3 V; the vendor `KEY_LED_3P3`) switched on (reg 0x51 = 0xfc), plus non-zero
+dimming levels in registers 0x08/0x09 (they read 0 after boot; the vendor DT uses 0x05, range
+1..0x1f); with LDO35 off the lights go out even though the LED command and dimming are still set.
+Jimmy's wish: the three buttons (Home, recents, back) light only when pressed and stay lit about
+1 s. `m9c`: driver patch 0009 reworked: `led-supply` (enabled only while lit), LED brightness
+0..31 = dimming level written to both registers, 0 = LED-off command and supply off; binding
+0008 gains `led-supply`; DT: `ldo35` ("vtouch_3.3v") in the PMIC node, `led-supply = <&ldo35>`,
+back key = KEY_ESC (Jimmy's choice), recents stays KEY_APPSELECT. Userspace: `a5y17lte-keyled`
+(python3, /usr/bin; OpenRC service `a5y17lte-keyled`, settings in /etc/conf.d/a5y17lte-keyled:
+brightness 16, timeout 1.0 s) watches the touch-key device and the Home key on gpio-keys
+(KEY_LEFTMETA) and lights the LED on a press with a 1 s re-armed timer. Device package 3-r7
+(depends python3) and build-pmos.sh's runlevel check know the service.

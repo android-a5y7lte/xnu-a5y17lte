@@ -1,0 +1,89 @@
+#!/usr/bin/python3
+# Galaxy A5 (2017): light the buttons under the screen while one of the three is pressed
+# (Home, recents, back) and keep them lit for a moment after the last press. The Home
+# key is on gpio-keys, the other two on the A96T316 touch-key controller, so one small
+# daemon watches both and drives the controller's LED (EVIDENCE 38).
+import argparse
+import glob
+import os
+import select
+import struct
+import time
+
+LED = "/sys/class/leds/a96t316::kbd_backlight/brightness"
+EV_KEY = 1
+KEY_LEFTMETA = 125	# the Home button, as set in the devicetree
+FMT = "llHHi"		# struct input_event on 64-bit
+SIZE = struct.calcsize(FMT)
+
+
+def find_devices():
+	"""event nodes to watch: all keys of the touch keys, only Home on gpio-keys"""
+	devs = {}
+	for d in glob.glob("/sys/class/input/input*"):
+		try:
+			name = open(d + "/name").read().strip()
+		except OSError:
+			continue
+		events = [e for e in os.listdir(d) if e.startswith("event")]
+		if not events:
+			continue
+		if name == "A96T316 touch keys":
+			devs["/dev/input/" + events[0]] = None
+		elif name == "gpio-keys":
+			devs["/dev/input/" + events[0]] = {KEY_LEFTMETA}
+	return devs
+
+
+def set_led(value):
+	try:
+		with open(LED, "w") as f:
+			f.write(str(value))
+	except OSError:
+		pass
+
+
+def main():
+	ap = argparse.ArgumentParser()
+	ap.add_argument("--brightness", type=int, default=16, help="1..31")
+	ap.add_argument("--timeout", type=float, default=1.0, help="seconds lit after a press")
+	args = ap.parse_args()
+
+	devs = {}
+	while len(devs) < 2:	# both devices have to exist; udev may be a moment late
+		devs = find_devices()
+		if len(devs) < 2:
+			time.sleep(2)
+	fds = {os.open(path, os.O_RDONLY | os.O_NONBLOCK): codes for path, codes in devs.items()}
+
+	lit = False
+	deadline = 0.0
+	try:
+		while True:
+			wait = max(0.0, deadline - time.monotonic()) if lit else None
+			ready, _, _ = select.select(list(fds), [], [], wait)
+			pressed = False
+			for fd in ready:
+				try:
+					data = os.read(fd, SIZE * 32)
+				except BlockingIOError:
+					continue
+				for off in range(0, len(data) - SIZE + 1, SIZE):
+					_, _, typ, code, val = struct.unpack_from(FMT, data, off)
+					if typ == EV_KEY and val == 1 and (fds[fd] is None or code in fds[fd]):
+						pressed = True
+			now = time.monotonic()
+			if pressed:
+				if not lit:
+					set_led(args.brightness)
+					lit = True
+				deadline = now + args.timeout
+			if lit and now >= deadline:
+				set_led(0)
+				lit = False
+	finally:
+		set_led(0)
+
+
+if __name__ == "__main__":
+	main()

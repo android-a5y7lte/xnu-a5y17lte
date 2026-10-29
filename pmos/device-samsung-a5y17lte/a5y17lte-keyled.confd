@@ -1,0 +1,5 @@
+# Galaxy A5 (2017) button backlight
+# brightness: dimming level 1 (dimmest) to 31 (brightest)
+keyled_brightness=16
+# seconds the buttons stay lit after the last press
+keyled_timeout=1.0

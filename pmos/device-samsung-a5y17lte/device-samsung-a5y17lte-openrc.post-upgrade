@@ -7,6 +7,7 @@ rc-update -q add swclock boot
 # resolv.conf that works without systemd-resolved (the stub 127.0.0.53 that
 # pmOS ships has no resolver behind it under OpenRC)
 rc-update -q add a5y17lte-usbnet default
+rc-update -q add a5y17lte-keyled default
 if grep -q '^nameserver 127\.0\.0\.53' /etc/resolv.conf 2>/dev/null; then
 	printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' > /etc/resolv.conf
 fi
