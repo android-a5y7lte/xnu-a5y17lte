@@ -2253,3 +2253,17 @@ builds and installs the modules into `build/modules/usr/lib/modules/7.2.0-a5y17l
 shipping an empty modules.order. Image `m8c` (no embedded firmware, so it can go in git).
 Plan: stage the modules, firmware and regdb in the live rootfs, flash m8c, check that udev
 loads ath10k_sdio at boot, then rebuild the rootfs with all of it.
+
+**m8c result (Jimmy, 2026-10-29): Wi-Fi works as MODULES.** Flashed m8c (Wi-Fi as modules, no
+embedded firmware), booted, Phosh and touch fine. The first boot after the flash had no USB link:
+the PC saw a full-speed device that failed enumeration (`device descriptor read/64, error -71`,
+`unable to enumerate USB device`); a cable replug and a restart from Phosh fixed it (cause not
+found; keep an eye on it). Then, over USB: copied `build/modules/usr/lib/modules/7.2.0-a5y17lte`
+into the rootfs, `depmod -a`, `apk add linux-firmware-ath10k wireless-regdb iw` (the mkinitfs trigger
+now passes, EVIDENCE 34), module vermagic `7.2.0-a5y17lte SMP preempt aarch64` = uname -r.
+`modprobe ath10k_sdio` loaded ath10k_core, ath, mac80211, cfg80211 and friends; the firmware came
+from /lib/firmware (zstd), regulatory.db loaded (no more "failed to load regulatory.db"),
+wlan0 appeared and NetworkManager rejoined "home AP" on its own. After `reboot`, udev loaded
+ath10k_sdio automatically, wlan0 connected by itself (192.168.2.29), 2/2 pings through wlan0
+at about 11 ms, Phosh up. The board data is still the generic board.bin (board-2.bin has no
+entry for this module). The live a5y17lte-usbnet is updated to metric 700.
