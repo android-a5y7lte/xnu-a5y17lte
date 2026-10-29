@@ -3,7 +3,7 @@ maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=device-samsung-a5y17lte
 pkgdesc="Samsung Galaxy A5 (2017)"
 pkgver=3
-pkgrel=4
+pkgrel=5
 url="https://github.com/android-a5y7lte/xnu-a5y17lte"
 license="MIT"
 arch="aarch64"
@@ -23,6 +23,9 @@ depends="
 	mesa-dri-gallium
 	mesa-egl
 	mesa-gles
+	linux-firmware-ath10k
+	wireless-regdb
+	iw
 "
 makedepends="devicepkg-dev"
 subpackages="$pkgname-openrc:openrc"

@@ -2,11 +2,12 @@
 # (mainline/dts) and config (build-mainline.sh's .config from
 # mainline/config/a5y17lte.config). build-pmos.sh copies those files here,
 # so the package always builds what the FIT boot image boots.
-# No modules: every driver is built in; modules.builtin tells kmod so.
+# Almost everything is built in; the Wi-Fi stack (cfg80211, mac80211, ath10k) is built as
+# modules and loaded from the rootfs (EVIDENCE 35, option 2).
 maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=linux-postmarketos-exynos7880
 pkgver=7.2
-pkgrel=1
+pkgrel=2
 pkgdesc="Mainline kernel for Samsung Exynos 7880 devices (Galaxy A5 2017)"
 arch="aarch64"
 _carch="arm64"
@@ -20,6 +21,7 @@ makedepends="
 	clang
 	findutils
 	flex
+	kmod
 	linux-headers
 	lld
 	llvm
@@ -58,7 +60,7 @@ build() {
 	unset LDFLAGS
 	make ARCH="$_carch" LLVM=1 HOSTLDFLAGS="-fuse-ld=lld" LOCALVERSION= \
 		KBUILD_BUILD_VERSION="$((pkgrel + 1))-postmarketOS" \
-		Image exynos/exynos7880-a5y17lte.dtb
+		Image modules exynos/exynos7880-a5y17lte.dtb
 }
 
 package() {
@@ -68,14 +70,13 @@ package() {
 	install -Dm644 include/config/kernel.release \
 		"$pkgdir"/usr/share/kernel/"$_flavor"/kernel.release
 
-	# No modules, but kmod must know what is built in, or "modprobe zram"
-	# fails (postmarketos-zram-swap, EVIDENCE 22a). The empty modules.order
-	# makes Alpine's kmod trigger run depmod on install; without it, the
-	# trigger treats the directory as uninstalled and deletes modules.dep.
+	# Modules into /usr/lib/modules/<release> (usrmerge); modules_install also writes
+	# modules.builtin*, modules.order and runs depmod. The build/source links point into
+	# the build directory and must not be packaged.
+	make ARCH="$_carch" LLVM=1 LOCALVERSION= \
+		INSTALL_MOD_PATH="$pkgdir"/usr INSTALL_MOD_STRIP=1 modules_install
 	local rel="$(cat include/config/kernel.release)"
-	install -Dm644 -t "$pkgdir"/usr/lib/modules/"$rel" \
-		modules.builtin modules.builtin.modinfo
-	install -Dm644 /dev/null "$pkgdir"/usr/lib/modules/"$rel"/modules.order
+	rm -f "$pkgdir"/usr/lib/modules/"$rel"/build "$pkgdir"/usr/lib/modules/"$rel"/source
 }
 
 sha512sums="

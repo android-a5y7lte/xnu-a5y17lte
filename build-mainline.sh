@@ -70,7 +70,11 @@ fi
 KCONFIG_ALLCONFIG="$ALLCFG" "${KM[@]}" allnoconfig >/dev/null
 # RSTLVL=N: debug patch, the kernel resets itself at checkpoint N (EVIDENCE 29)
 [ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply "$ML/debug/a5-rstlvl.patch"
-"${KM[@]}" -j"$JOBS" Image exynos/exynos7880-a5y17lte.dtb headers usr_gen_init_cpio >/dev/null
+"${KM[@]}" -j"$JOBS" Image modules exynos/exynos7880-a5y17lte.dtb headers usr_gen_init_cpio >/dev/null
+# the Wi-Fi modules (ath10k, mac80211, cfg80211): same tree and config as the Image, for
+# testing on the phone; the rootfs gets them from the kernel package (pmos/linux-*/APKBUILD)
+rm -rf "$B/modules"
+"${KM[@]}" modules_install INSTALL_MOD_PATH="$B/modules/usr" INSTALL_MOD_STRIP=1 >/dev/null
 [ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply -R "$ML/debug/a5-rstlvl.patch"
 cp "$LINUX/arch/arm64/boot/Image" "$LINUX/arch/arm64/boot/dts/exynos/exynos7880-a5y17lte.dtb" "$B/fit/"
 # STUB=1: replace the kernel with a reset stub, to test U-Boot's hand-off (EVIDENCE 29)

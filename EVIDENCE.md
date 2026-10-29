@@ -2236,3 +2236,20 @@ module (generic board.bin in use; Samsung's bdwlan30.bin is in the SYSTEM backup
 must come from the kernel: `FWEMBED=1` embeds it (works, image not committable because of the
 Qualcomm firmware); alternatives are enabling modules with the rootfs firmware package
 (`linux-firmware-ath10k`) or an initramfs firmware path.
+
+**Connected (Jimmy, 2026-10-29, through the Phosh settings on m8b):** `wlan0` joined
+"home AP" (5200 MHz ch 40, link rate 1170 Mbit/s, signal 87), DHCP 192.168.2.29/24, 3 of 3 pings to
+1.1.1.1 through wlan0 in about 10 ms. Two default routes at metric 600 (usb0 from
+a5y17lte-usbnet and wlan0): usbnet now uses metric 700 so Wi-Fi is preferred and the USB/PC route
+stays as a fallback (package 3-r5).
+
+**Option 2 (modules), Jimmy's decision 2026-10-29:** `CONFIG_MODULES=y`; cfg80211, mac80211, ath10k,
+ath10k_sdio (and their crypto helpers) are modules; `FW_LOADER_COMPRESS_ZSTD=y` for Alpine's
+`.zst` firmware; the firmware comes from `linux-firmware-ath10k` and the regulatory database
+from `wireless-regdb`, both now dependencies of the device package. `build-mainline.sh` also
+builds and installs the modules into `build/modules/usr/lib/modules/7.2.0-a5y17lte` (about
+2.4 MB) so the same tree can be tested on the phone, and the kernel package
+(`linux-postmarketos-exynos7880` 7.2-r2) does `modules_install` (with depmod) instead of
+shipping an empty modules.order. Image `m8c` (no embedded firmware, so it can go in git).
+Plan: stage the modules, firmware and regdb in the live rootfs, flash m8c, check that udev
+loads ath10k_sdio at boot, then rebuild the rootfs with all of it.
