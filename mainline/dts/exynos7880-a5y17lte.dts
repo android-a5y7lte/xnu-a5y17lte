@@ -369,6 +369,9 @@
 	cnss_dcdc_en: regulator-cnss-dcdc-en {
 		compatible = "regulator-fixed";
 		regulator-name = "cnss_dcdc_en";
+		/* the MMC core needs a voltage range to derive the OCR mask (m8a: -EINVAL) */
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <4000>;
 		enable-active-high;
 		gpio = <&gpd3 3 GPIO_ACTIVE_HIGH>;

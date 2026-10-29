@@ -2203,3 +2203,16 @@ PWRSEQ_SIMPLE, built in (CONFIG_MODULES is off). The Qualcomm firmware
 into the image with `CONFIG_EXTRA_FIRMWARE` only when `FWEMBED=1`, so the probe runs
 before the rootfs exists; that image is therefore NOT committed. Reading it: `dmesg | grep
 -i -E "mmc1|sdio|ath10k"`, `ls /sys/bus/sdio/devices`, `cat /sys/bus/sdio/devices/*/device`.
+
+**m8a result (Jimmy, 2026-10-29): the QCA9377 is on the SDIO bus and ath10k binds to it.**
+Booted fine, Phosh and touch unaffected. dmesg: `mmc1: new high speed SDIO card at address
+0001` (25 MHz, 4-bit, CIU about 99.9 MHz after the div-3, so the fixed 399.75 MHz stand-in
+works), `/sys/bus/sdio/devices/mmc1:0001:1`: vendor 0x0271, device 0x0701
+(`SDIO_ID=0271:0701`, DRIVER=ath10k_sdio) = Atheros QCA9377, the ID ath10k_sdio supports.
+Then `ath10k_sdio: unable to enable sdio function: -5`, `could not power on hif bus (-5)`,
+`could not probe fw (-5)`. Cause: `cnss_dcdc_en` stayed disabled (gpd3-3 low, 0 users):
+`dwmmc_exynos: Failed getting OCR mask: -22` / `could not set regulator OCR (-22)` /
+`failed to enable vmmc regulator`, since the fixed regulator had no voltage range. The SDIO
+interface answers without the DCDC, the chip core does not. WLAN_EN (gpd3-6) is high
+(the pwrseq released it). Also: `cfg80211: failed to load regulatory.db` (rootfs file,
+needed later). Fix in `m8b`: `regulator-min/max-microvolt = <3300000>` on `cnss_dcdc_en`.
