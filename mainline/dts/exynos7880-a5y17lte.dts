@@ -313,3 +313,90 @@
 		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
 	};
 };
+
+/*
+ * Wi-Fi bring-up (EVIDENCE 35): Qualcomm QCA9377 on SDIO (mmc1). [D] eur_open_05:
+ * `wlan` WLAN_EN gpd3-6, host wake gpa2-2, supply cnss_dcdc_en = regulator-fixed on
+ * gpd3-3 (4 ms startup); pins and timings as in the Exynos7870 boards that use
+ * the same sd1 pins (j7xelte). The card is powered through vmmc, then WLAN_EN is
+ * released by the MMC power sequence.
+ */
+&pinctrl_fsys {
+	sd1_clk: sd1-clk-pins {
+		samsung,pins = "gpr2-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+
+	sd1_cmd: sd1-cmd-pins {
+		samsung,pins = "gpr2-1";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+
+	sd1_bus1: sd1-bus-width1-pins {
+		samsung,pins = "gpr3-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-con-pdn = <EXYNOS_PIN_PDN_INPUT>;
+		samsung,pin-pud-pdn = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+
+	sd1_bus4: sd1-bus-width4-pins {
+		samsung,pins = "gpr3-1", "gpr3-2", "gpr3-3";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-con-pdn = <EXYNOS_PIN_PDN_INPUT>;
+		samsung,pin-pud-pdn = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+};
+
+&pinctrl_top {
+	/* [D] cnss_wlanen: WLAN_EN gpd3-6 as a GPIO output, low */
+	wlan_en: wlan-en-pins {
+		samsung,pins = "gpd3-6";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR3>;
+	};
+};
+
+/ {
+	cnss_dcdc_en: regulator-cnss-dcdc-en {
+		compatible = "regulator-fixed";
+		regulator-name = "cnss_dcdc_en";
+		startup-delay-us = <4000>;
+		enable-active-high;
+		gpio = <&gpd3 3 GPIO_ACTIVE_HIGH>;
+	};
+
+	pwrseq_wifi: pwrseq-wifi {
+		compatible = "mmc-pwrseq-simple";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wlan_en>;
+		reset-gpios = <&gpd3 6 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <100>;
+	};
+};
+
+&mmc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_bus1 &sd1_bus4>;
+	vmmc-supply = <&cnss_dcdc_en>;
+	mmc-pwrseq = <&pwrseq_wifi>;
+
+	bus-width = <4>;
+	fifo-depth = <64>;
+	samsung,dw-mshc-ciu-div = <3>;
+	samsung,dw-mshc-sdr-timing = <0 3>;
+	samsung,dw-mshc-ddr-timing = <1 2>;
+	max-frequency = <25000000>;
+	non-removable;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	status = "okay";
+};

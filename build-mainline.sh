@@ -54,7 +54,20 @@ grep -q exynos7880-a5y17lte "$LINUX/arch/arm64/boot/dts/exynos/Makefile" || \
 	sed -i 's/^\(\texynos7870-on7xelte.dtb\t\t\\\)$/\1\n\texynos7880-a5y17lte.dtb\t\t\\/' \
 		"$LINUX/arch/arm64/boot/dts/exynos/Makefile"
 KM=(make -C "$LINUX" ARCH=arm64 LLVM=1)
-KCONFIG_ALLCONFIG="$ML/config/a5y17lte.config" "${KM[@]}" allnoconfig >/dev/null
+ALLCFG="$ML/config/a5y17lte.config"
+# FWEMBED=1: build the ath10k QCA9377 SDIO firmware (from the PC's linux-firmware) into
+# the kernel, so the Wi-Fi probe runs before the rootfs exists (EVIDENCE 35). The
+# image then carries Qualcomm firmware: do not commit it.
+if [ -n "${FWEMBED:-}" ]; then
+	FWD="$B/fw"; rm -rf "$FWD"; mkdir -p "$FWD/ath10k/QCA9377/hw1.0"
+	for f in firmware-sdio-5.bin board.bin board-2.bin; do
+		zstd -dq "/lib/firmware/ath10k/QCA9377/hw1.0/$f.zst" -o "$FWD/ath10k/QCA9377/hw1.0/$f"
+	done
+	ALLCFG="$B/a5y17lte-fw.config"
+	cp "$ML/config/a5y17lte.config" "$ALLCFG"
+	printf 'CONFIG_EXTRA_FIRMWARE="ath10k/QCA9377/hw1.0/firmware-sdio-5.bin ath10k/QCA9377/hw1.0/board-2.bin ath10k/QCA9377/hw1.0/board.bin"\nCONFIG_EXTRA_FIRMWARE_DIR="%s"\n' "$FWD" >> "$ALLCFG"
+fi
+KCONFIG_ALLCONFIG="$ALLCFG" "${KM[@]}" allnoconfig >/dev/null
 # RSTLVL=N: debug patch, the kernel resets itself at checkpoint N (EVIDENCE 29)
 [ -z "${RSTLVL:-}" ] || git -C "$LINUX" apply "$ML/debug/a5-rstlvl.patch"
 "${KM[@]}" -j"$JOBS" Image exynos/exynos7880-a5y17lte.dtb headers usr_gen_init_cpio >/dev/null

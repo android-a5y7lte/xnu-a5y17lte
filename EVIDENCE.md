@@ -2189,3 +2189,17 @@ mode, known low throughput); the QCA9377 hw1.1 (Rome-TF 1.1) revision named by t
 files may not match the hw1.0 firmware; the board data may need Samsung's file. Safe first
 step: DT + kernel config only, boot, read `dmesg`/`/sys/bus/sdio/devices` to see the SDIO
 ID and ath10k's complaints; WLAN_EN/DCDC_EN are only GPIO writes.
+
+**m8a: SDIO probe image (built 2026-10-29, not flashed yet).** `FWEMBED=1 MILESTONE=m8a
+./build-mainline.sh`: DT adds the FSYS pin controller (`pinctrl@13750000`, SPI 250,
+gpr0-gpr4, sd1 pin states as in the Exynos7870 boards using the same pins), `mmc1`
+(`samsung,exynos7870-dw-mshc`, BIU gate = CMU_FSYS `CLK_GOUT_FSYS_MMC1_ACLK`, CIU = a fixed
+399.75 MHz stand-in because CMU_MIF's FSYS_MMC1 is not supported; if S-Boot left that
+clock gated the controller will time out), `cnss_dcdc_en` regulator-fixed (gpd3-3) as vmmc, a
+`mmc-pwrseq-simple` that releases WLAN_EN (gpd3-6) 100 ms after power-on, 4-bit,
+`cap-sdio-irq`, max 25 MHz. Kernel config: CFG80211, MAC80211, ATH10K, ATH10K_SDIO,
+MMC_PWRSEQ_SIMPLE, built in (CONFIG_MODULES is off). The Qualcomm firmware
+(`firmware-sdio-5.bin`, `board-2.bin`, `board.bin` from the PC's linux-firmware) is built
+into the image with `CONFIG_EXTRA_FIRMWARE` only when `FWEMBED=1`, so the probe runs
+before the rootfs exists; that image is therefore NOT committed. Reading it: `dmesg | grep
+-i -E "mmc1|sdio|ath10k"`, `ls /sys/bus/sdio/devices`, `cat /sys/bus/sdio/devices/*/device`.
