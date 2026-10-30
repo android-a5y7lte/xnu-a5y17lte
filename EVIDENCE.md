@@ -2652,3 +2652,17 @@ fbdev emulation nor phoc's dumb buffers could be allocated, and nothing new was 
 showing the last simpledrm frame, DECON/IDMA untouched). Fix: `CONFIG_CMA=y`, `CONFIG_DMA_CMA=y`,
 `CONFIG_CMA_SIZE_MBYTES=64` (default area). Image `m10d`. Hardware facts confirmed: the pipeline adoption
 (checks, aperture eviction, DRM registration, connector with the DT mode) works on the real phone.
+
+**m10d result (Jimmy, 2026-10-30; the phone itself was fine, SSH over USB worked): display still frozen, Wi-Fi gone;
+recovered by flashing `m9d` again.** With CMA (64 MiB at 0xfb800000, CmaFree 56860 kB) the driver now sets up
+fbdev emulation (`fb0: exynos7880-deco frame buffer device`), `card1`/`card1-DSI-1` connected 1080x1920 (enabled=disabled),
+phoc and phosh run, but the panel keeps showing the last simpledrm frame: nothing the new driver draws
+reaches the screen. Open question for the next session: the plane update only writes the IDMA_G1 base
+address (+0x74), as in the manual test; what is different when the driver does it (the buffer address is in CMA, 0xfb...: does the
+IDMA reach that range, is the SMMU/AXI window limited to a range around 0x4... to 0x6..., is the buffer written at
+all, does the commit even run `update` as the crtc is `enabled=disabled`)? Check with `modetest`/a manual
+EVIOC-style test: write a CMA buffer address to IDMA +0x74 by hand. Also found: **CONFIG_CMA changes
+`struct device`, so every module built without it misbehaves** (ath10k_sdio "unable to enable sdio function: -62";
+no version-check error: CONFIG_MODVERSIONS is off). Rule: the boot image's config and the rootfs modules must come from the same
+config; after a config change that touches core structures, install fresh modules (`build/modules`, built by
+build-mainline.sh) or rebuild the rootfs. Consider enabling CONFIG_MODVERSIONS to make such mismatches fail loudly.
