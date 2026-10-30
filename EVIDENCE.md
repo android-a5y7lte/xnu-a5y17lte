@@ -2586,3 +2586,16 @@ list shows no claim on gpd2-3 (only gpd2-0 `mcu_boot0`), and `vtouch_2.8v` and `
 other users. So either the TWRP kernel's DT does not drive the motor on this unit, the vendor driver switches
 something other than gpd2-3, or the motor/its circuit is dead. Not settled; needs the vendor `sec_vib` driver
 source (one more vendor file) or a check that the phone vibrates in another OS (Android, Sailfish).
+
+## 46. Lock screen auto-unlock: patched Phosh (2026-10-30, Jimmy's request: default length 6)
+
+The phone's Phosh is Alpine's `phosh-0.58.0-r0` from edge/community (not pmOS's systemd fork). Source
+`phosh-0.58.0.tar.xz` from sources.phosh.mobi, SHA-512 `df60a8e1…e95d` = the checksum in Alpine's APKBUILD
+(checked). Change: `src/lockscreen.c` `input_changed_cb` reads a new setting and calls the same code as the
+Unlock button (`submit_cb`) when the entry length equals it; new key `sm.puri.phosh.lockscreen autosubmit-length`
+(uint, 0 = off, range 0..64) in `data/mobi.phosh.shell.gschema.xml`. Patch `pmos/phosh/0001-lockscreen-add-autosubmit-length.patch`;
+package `pmos/phosh/APKBUILD` = Alpine's recipe with pkgrel 1 (so apk prefers it), the patch added, `options="!check"`
+(the tests need xvfb), maintainer Jimmy. It is built with `pmbootstrap build phosh` from `upstream/pmaports/temp/phosh`
+(copied from pmos/phosh). Default stays 0 in the schema; the device package's gschema override sets
+`autosubmit-length=6` (the passcode is 6 digits). Each automatic try counts as one failed login if the entered passcode is
+wrong, so the value must be the passcode length (a longer passcode would be tried at its first 6 characters).

@@ -1,0 +1,53 @@
+diff --git a/data/mobi.phosh.shell.gschema.xml b/data/mobi.phosh.shell.gschema.xml
+--- a/data/mobi.phosh.shell.gschema.xml
++++ b/data/mobi.phosh.shell.gschema.xml
+@@ -168,6 +168,17 @@
+         or password by simply swiping up.
+       </description>
+     </key>
++
++    <key name="autosubmit-length" type="u">
++      <default>0</default>
++      <range min="0" max="64"/>
++      <summary>Unlock automatically at this passcode length</summary>
++      <description>
++        When the passcode entry reaches exactly this many characters, unlocking
++        is tried without pressing the Unlock button. Each try counts as a login
++        attempt, so this should be the length of the passcode. 0 disables it.
++      </description>
++    </key>
+   </schema>
+ 
+   <enum id='mobi.phosh.shell.NotificationUrgency'>
+diff --git a/src/lockscreen.c b/src/lockscreen.c
+--- a/src/lockscreen.c
++++ b/src/lockscreen.c
+@@ -453,11 +453,14 @@
+ }
+ 
+ 
++static void submit_cb (PhoshLockscreen *self);
++
+ static void
+ input_changed_cb (PhoshLockscreen *self)
+ {
+   PhoshLockscreenPrivate *priv;
+   guint16 length;
++  guint autosubmit_length;
+ 
+   g_assert (PHOSH_IS_LOCKSCREEN (self));
+   priv = phosh_lockscreen_get_instance_private (self);
+@@ -466,6 +469,13 @@
+   length = gtk_entry_get_text_length (GTK_ENTRY (priv->entry_pin));
+ 
+   gtk_widget_set_sensitive (priv->btn_submit, length != 0);
++
++  /* Try to unlock as soon as the passcode has the configured length */
++  if (priv->lockscreen_settings) {
++    autosubmit_length = g_settings_get_uint (priv->lockscreen_settings, "autosubmit-length");
++    if (autosubmit_length > 0 && length == autosubmit_length)
++      submit_cb (self);
++  }
+ }
+ 
+ 

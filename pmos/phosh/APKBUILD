@@ -1,0 +1,132 @@
+# Contributor: Bart Ribbers <bribbers@disroot.org>
+# Contributor: Danct12 <danct12@disroot.org>
+# Contributor: Newbyte <newbyte@disroot.org>
+# Contributor: Rasmus Thomsen <oss@cogitri.dev>
+# Galaxy A5 (2017): Alpine's phosh 0.58.0-r0 plus 0001-lockscreen-add-autosubmit-length.patch
+# (unlock automatically at a configured passcode length, EVIDENCE 46). Needs no tests/LTO changes.
+maintainer="Jimmy <fakeandroit@gmail.com>"
+pkgname=phosh
+pkgver=0.58.0
+pkgrel=1
+pkgdesc="Wayland shell for GNOME on mobile devices"
+# armhf: blocked by gnome-shell-schemas
+arch="all !armhf"
+options="!check"
+url="https://gitlab.gnome.org/World/Phosh/phosh"
+license="GPL-3.0-only"
+triggers="$pkgname.trigger=/usr/lib/phosh/plugins/prefs"
+depends="
+	$pkgname-schemas
+	adwaita-fonts
+	adwaita-icon-theme
+	bash
+	dbus-x11
+	dbus:org.freedesktop.Secrets
+	desktop-file-utils
+	gnome-control-center
+	gnome-session
+	gnome-settings-daemon
+	gnome-shell-schemas
+	gsettings-desktop-schemas
+	phoc
+	phosh-keyboard
+	polkit-elogind
+	xwayland
+	"
+makedepends="
+	appstream-dev
+	callaudiod-dev
+	elogind-dev
+	evince-dev
+	evolution-data-server-dev
+	feedbackd-dev
+	gcr-dev
+	gettext-dev
+	glib-dev
+	gmobile-dev
+	gnome-bluetooth-dev
+	gnome-desktop-dev
+	gtk+3.0-dev
+	libadwaita-dev
+	libgudev-dev
+	libhandy1-dev
+	libsecret-dev
+	linux-pam-dev
+	meson
+	modemmanager-dev
+	networkmanager-dev
+	polkit-elogind-dev
+	pulseaudio-dev
+	py3-docutils
+	qrcodegen-dev
+	upower-dev
+	wayland-dev
+	wayland-protocols
+	"
+checkdepends="xvfb-run xmlstarlet"
+# the ordering here is important - libphosh split functions need to run first to move the libphosh-0
+# headers/pkgconfig/lib into the libphosh packages, before the top level -dev package gobbles
+# up the rest.
+subpackages="
+	libphosh:libs
+	libphosh-dev:libphosh_dev
+	$pkgname-dbg
+	$pkgname-dev
+	$pkgname-doc
+	$pkgname-lang
+	$pkgname-portalsconf::noarch
+	$pkgname-schemas::noarch
+	$pkgname-systemd
+	"
+source="https://sources.phosh.mobi/releases/phosh/phosh-${pkgver/_/.}.tar.xz
+	0001-lockscreen-add-autosubmit-length.patch
+	"
+builddir="$srcdir/$pkgname-${pkgver/_/.}"
+somask="libphoshsearch.so"
+
+prepare() {
+	default_prepare
+	sed -i 's/\.rc/_rc/' meson.build
+}
+
+build() {
+	# phoc tests need a running Wayland compositor
+	abuild-meson \
+		-Db_lto=true \
+		-Dphoc_tests=disabled \
+		-Dman=true \
+		-Dbindings-lib=true \
+		. output
+	meson compile -C output
+}
+
+check() {
+	xvfb-run -a meson test --print-errorlogs -C output
+}
+
+package() {
+	DESTDIR="$pkgdir/" meson install --no-rebuild --skip-subprojects -C output
+}
+
+portalsconf() {
+	install_if="$pkgname=$pkgver-r$pkgrel xdg-desktop-portal>=1.17.1"
+	amove usr/share/xdg-desktop-portal/phosh-portals.conf
+}
+
+libphosh_dev() {
+	amove usr/include/libphosh-*
+	amove usr/lib/libphosh-*.so
+	amove usr/lib/pkgconfig/libphosh-*.pc
+}
+
+schemas() {
+	pkgdesc="$pkgdesc (schemas)"
+	depends=
+
+	amove usr/share/glib-2.0/schemas
+}
+
+sha512sums="
+df60a8e161b271bf14c477d589d00759e06b003f8ed0fb21120eff9ddfd1880d9bf0b38867376b7d6d5035147d7940b7645efa60b7efc6f0a9d646fbbf03e95d  phosh-0.58.0.tar.xz
+c4b1ac38544dd750e97fde90aa9e3dbf4f1d0bd3860a82a052a1ea6d5239e26291fe72164783003148deb15fd9d6851bc7c34d4ae7d1abd8f30bde0905429fd0  0001-lockscreen-add-autosubmit-length.patch
+"
