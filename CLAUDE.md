@@ -135,6 +135,11 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   register files and the S6E3FA3 panel driver read-only (nothing copied). Plan: DECON take-over DRM driver first,
   then DSIM + panel (brightness, power, AOD). AOD exists on this phone (ALPM/HLPM panel modes).
 - BACKLOG (Jimmy): double-tap-to-wake with the screen off (touch IC wake mode, needs the panel/DECON work and suspend).
+- PARKED (Jimmy, 2026-10-30): haptic vibration. The kernel side works (m9d: `gpio-vibrator` on gpd2-3, FF_RUMBLE device, the pad
+  really goes high) but the motor never buzzes, not with LDO34/LDO35 on, and not under the vendor driver in TWRP
+  either (EVIDENCE 45). Open: whether the motor is dead on this unit, or the vendor `sec_vib` driver (not read) switches
+  something else. To resume: ask Jimmy whether the phone ever vibrated in Android/Sailfish, and whether reading the
+  vendor sec_vib driver read-only is OK. The vibrator DT node and CONFIG_INPUT_GPIO_VIBRA stay in the tree.
 - BACKLOG (Jimmy, 2026-10-30): DeX/Ubuntu-Touch-style desktop mode on an external screen, switching to a desktop layout
   automatically when connected. CHECKED FIRST (EVIDENCE 44): a wired USB-C display (DisplayPort Alt Mode) is NOT possible
   on this board (USB 2.0 only, no video-out IP, no USB-C PD/CC chip). Feasible variants: wireless display (Miracast over
