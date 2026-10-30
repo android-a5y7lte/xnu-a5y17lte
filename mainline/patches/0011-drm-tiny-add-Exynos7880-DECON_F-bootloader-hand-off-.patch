@@ -1,8 +1,7 @@
-From 21d1d8846dbbb46578c96edbf5c754db04e92989 Mon Sep 17 00:00:00 2001
+From 6a223fbc08c3b4b6f65504abd0db37a6456b3828 Mon Sep 17 00:00:00 2001
 From: Jimmy <fakeandroit@gmail.com>
 Date: Fri, 30 Oct 2026 17:49:57 +0200
-Subject: [PATCH 11/11] drm/tiny: add Exynos7880 DECON_F bootloader hand-off
- driver
+Subject: [PATCH] drm/tiny: add Exynos7880 DECON_F bootloader hand-off driver
 
 The display controller of the Exynos7880 is of the DECON_F family used
 since the Exynos8 generation, which has a different register layout from
@@ -30,8 +29,8 @@ Assisted-by: Claude:claude-sonnet-5-5
 ---
  drivers/gpu/drm/tiny/Kconfig            |  18 ++
  drivers/gpu/drm/tiny/Makefile           |   1 +
- drivers/gpu/drm/tiny/exynos7880-decon.c | 389 ++++++++++++++++++++++++
- 3 files changed, 408 insertions(+)
+ drivers/gpu/drm/tiny/exynos7880-decon.c | 392 ++++++++++++++++++++++++
+ 3 files changed, 411 insertions(+)
  create mode 100644 drivers/gpu/drm/tiny/exynos7880-decon.c
 
 diff --git a/drivers/gpu/drm/tiny/Kconfig b/drivers/gpu/drm/tiny/Kconfig
@@ -77,10 +76,10 @@ index 48d30bf61..e3cd2d5b7 100644
  obj-$(CONFIG_DRM_PIXPAPER)              += pixpaper.o
 diff --git a/drivers/gpu/drm/tiny/exynos7880-decon.c b/drivers/gpu/drm/tiny/exynos7880-decon.c
 new file mode 100644
-index 000000000..1d7b7077a
+index 000000000..57af22117
 --- /dev/null
 +++ b/drivers/gpu/drm/tiny/exynos7880-decon.c
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,392 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Exynos7880 DECON_F display controller, bootloader hand-off
@@ -379,13 +378,6 @@ index 000000000..1d7b7077a
 +	if (ret)
 +		return ret;
 +
-+	/* take over from the firmware framebuffer, which uses the same memory */
-+	ret = devm_aperture_acquire_for_platform_device(pdev, fb_addr,
-+							decon->mode.hdisplay *
-+							decon->mode.vdisplay * 4);
-+	if (ret)
-+		return dev_err_probe(dev, ret, "failed to acquire the framebuffer\n");
-+
 +	ret = drmm_mode_config_init(drm);
 +	if (ret)
 +		return ret;
@@ -422,6 +414,16 @@ index 000000000..1d7b7077a
 +		return ret;
 +
 +	drm_mode_config_reset(drm);
++
++	/*
++	 * Take over from the firmware framebuffer, which uses the same memory. This is done as late
++	 * as possible: until here a failure leaves the firmware framebuffer working.
++	 */
++	ret = aperture_remove_conflicting_devices(fb_addr,
++						  decon->mode.hdisplay * decon->mode.vdisplay * 4,
++						  exynos7880_decon_driver.name);
++	if (ret)
++		return dev_err_probe(dev, ret, "failed to take over the framebuffer\n");
 +
 +	ret = drm_dev_register(drm, 0);
 +	if (ret)

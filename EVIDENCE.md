@@ -2630,3 +2630,13 @@ now sets scale 2 for both connector names (`Unknown-1` = simpledrm, `DSI-1` = th
 Recovery if the display stays dark: Volume Down + Power, TWRP (Volume Up + Home + Power), flash `m9d`.
 Note: the PC lost the USB link to the phone during this work (phone's usb0 NO-CARRIER, no adb, no `enx` on the PC)
 while Wi-Fi kept working (192.168.2.31); TWRP and flashing need the USB cable, so check it first.
+
+**m10b result (Jimmy, 2026-10-30): the phone boots normally, but the new driver did not take over.** Console text,
+Phosh lock screen, touch and UI size all as before, on `simpledrm` (`card0`, DRIVER=simple-framebuffer, connector
+`Unknown-1`, 1080x1920). dmesg: `exynos7880-decon 14830000.display-controller: error -16: failed to acquire the
+framebuffer`. So the driver passed every hardware check (DECON running in command mode, 1080x1920, window 0 fed by IDMA_G1,
+framebuffer address read) and failed at `devm_aperture_acquire_for_platform_device()`: that call claims free
+memory but does not evict the owner (simpledrm already held 0x67000000), hence -EBUSY. The safe fallback worked: the
+screen never went away. Fix (patch 0011 amended): call `aperture_remove_conflicting_devices()` instead,
+as late as possible, right before `drm_dev_register()`, so an earlier failure still leaves simpledrm running. Image
+`m10c`. Note: this also gave the first test of the "probe on a running pipeline" checks on the real hardware.
