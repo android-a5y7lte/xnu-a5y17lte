@@ -7,7 +7,7 @@
 maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=linux-postmarketos-exynos7880
 pkgver=7.2
-pkgrel=3
+pkgrel=4
 pkgdesc="Mainline kernel for Samsung Exynos 7880 devices (Galaxy A5 2017)"
 arch="aarch64"
 _carch="arm64"
@@ -43,6 +43,8 @@ source="
 	0007-dt-bindings-usb-samsung-exynos-dwc3-add-exynos7880.patch
 	0008-dt-bindings-input-add-Abov-A96T316-touch-key-control.patch
 	0009-Input-add-Abov-A96T316-touch-key-controller-driver.patch
+	0010-dt-bindings-display-samsung-add-Exynos7880-DECON_F-h.patch
+	0011-drm-tiny-add-Exynos7880-DECON_F-bootloader-hand-off-.patch
 	exynos7880.dtsi
 	exynos7880-pinctrl.dtsi
 	exynos7880-a5y17lte.dts

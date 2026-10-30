@@ -2612,3 +2612,10 @@ schema both contain `autosubmit-length`. Installed on the phone with `apk add --
 (`autosubmit-length=6`) added and compiled, session restarted: `gsettings` reads `uint32 6`. `build-pmos.sh`
 now copies pmos/phosh to pmaports/temp and builds it (`pmb build --arch aarch64 phosh`) before the image.
 Not yet tried: a wrong six-digit code (expected: refused once, entry cleared).
+
+**Display driver saved as kernel patches (2026-10-30).** `0010` (binding `samsung,exynos7880-decon`) and `0011`
+(`drivers/gpu/drm/tiny/exynos7880-decon.c` + Kconfig `DRM_EXYNOS7880_DECON` + Makefile) in `mainline/patches`,
+made from commits on the `a5y17lte` branch of `upstream/linux`, `checkpatch --strict` clean (apart from the MAINTAINERS
+note and spelling false positives), `Assisted-by: Claude:claude-sonnet-5-5`, no Signed-off-by. Kernel package 7.2-r4 lists
+them. The driver is still untested on the phone (image `m10a`, `DECON=1 ./build-mainline.sh`; the node is disabled by
+default). The DT node stays in `mainline/dts` (`&decon`, status disabled).
