@@ -160,6 +160,12 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   "qca,qca6174"; BT_EN gpd4-2, BT_WAKE gpd5-1, BT_HOST_WAKE gpa1-6 }`, powered with the Wi-Fi supply
   (cnss_dcdc_en); firmware files in the SYSTEM backup: `rampatch_tlv_tf_1.1.tlv`, `nvm_tlv_tf_1.1.bin`; mainline
   `hci_qca` (`qcom,qca6174-bt`) over a UART (which one is still to find), Rome-TF 1.1 firmware naming to check.
+- BACKLOG (Jimmy, 2026-10-30, not urgent): try desktop GNOME Shell as an alternate session (instead of Phosh) for
+  experimentation. Notes for later: greetd would need a second session entry/selection (today `/etc/greetd/config.toml`
+  autologins `a5-phosh-session`); mutter/GNOME Shell wants working GLES (software llvmpipe on this phone will be slow, a
+  GPU driver would help a lot); pmOS has `gnome-shell-mobile`/`mutter-mobile` forks (the vendored meta package conflicts
+  with phosh's gnome-session pieces), and the touch layout is not meant for desktop GNOME, so expect to need
+  the keyboard/mouse (USB OTG) or the trackpad idea above. Keep Phosh as the default.
 - BACKLOG (Jimmy, 2026-10-30): all sensors (accelerometer, proximity, gyroscope, light, compass, ...). Vendor DT
   hint: they sit behind a sensor-hub MCU, `ssp,STM32F` on SPI 2 (spi@13930000, MISO/MOSI/SCK/SSN pins, reset
   `MCU_RST_N(SSP_RST)` on gpf4-2); mainline has no SSP/sensor-hub driver, so this is one hub driver
