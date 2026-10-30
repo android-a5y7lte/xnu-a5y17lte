@@ -2571,3 +2571,18 @@ generic DWC3 binding is not used), so there are no SuperSpeed lanes to repurpose
 one DSI output (dsim0) and no external-display path in the live setup (`dsi_mode = <1>`, windows 1-3 idle). The
 Galaxy A5 (2017) is a USB 2.0 Type-C phone without video out or DeX. What is possible: USB host/OTG for a
 keyboard, mouse or storage (`dr_mode = "otg"`, VBUS from LDO3), and wireless display over the QCA9377.
+
+**Haptics bring-up result (m9d, Jimmy, 2026-10-30): the motor does not buzz.** `gpio-vibrator` probes and creates
+`input1 "gpio-vibrator"` with FF_RUMBLE (EV_FF set); a rumble effect written to it (python EVIOCSFF, 0.5-1.5 s)
+plays without errors, gpd2-3 goes high for exactly the effect length (debugfs `enable out hi`, hardware registers
+CON pin3 = 1 output, DAT bit3 = 1, 0 afterwards), but Jimmy feels nothing. Tests that did NOT make it buzz: the same
+with PMIC LDO35 ("VDD_MOTOR_3P3" in the revision-00 DT, `vtouch_3.3v` elsewhere) on; LDO34 alone; LDO34 + LDO35
+together. PMIC LDO state map read (enable bits [7:6]): fully off are LDO2, 7, 10, 14, 15, 28, 34, 35; most others
+on. All revisions >= 01 of the vendor DT use the same node (`sec_vib`, `ldo_type = 1`, `ldo_en = <&gpd2 3 1>`);
+revision 00 uses `ldo_type = 0` with regulator `VDD_MOTOR_3P3` (= LDO35). In TWRP (Samsung's vendor kernel) the
+vendor driver's own interface, `echo 1500 > /sys/class/timed_output/vibrator/enable`, counts down and logs
+`[VIB] sec_vib_enable/sec_vib_work` but the motor does not buzz there either; the vendor kernel's gpio
+list shows no claim on gpd2-3 (only gpd2-0 `mcu_boot0`), and `vtouch_2.8v` and `vtouch_3.3v` are enabled by
+other users. So either the TWRP kernel's DT does not drive the motor on this unit, the vendor driver switches
+something other than gpd2-3, or the motor/its circuit is dead. Not settled; needs the vendor `sec_vib` driver
+source (one more vendor file) or a check that the phone vibrates in another OS (Android, Sailfish).
