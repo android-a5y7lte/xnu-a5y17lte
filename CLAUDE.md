@@ -171,6 +171,13 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   `MCU_RST_N(SSP_RST)` on gpf4-2); mainline has no SSP/sensor-hub driver, so this is one hub driver
   (plus firmware loading questions) rather than one driver per sensor; ties into auto-rotate and
   proximity screen-off in Phosh.
+- DISPLAY DRIVER WORKS BUT HAS ARTIFACTS (EVIDENCE 47-50, 2026-10-30): m10h (patches 0010/0011, DECON=1 build) shows Phosh through
+  our DECON hand-off driver (shmem shadow planes, damage copy into S-Boot's framebuffer at 0x67000000; fast, phoc 25-73 % CPU)
+  but there are small artifacts along the TOP EDGE of the panel (never there with simpledrm). m9e (same config/DT, driver off) is
+  clean: the driver causes them. Suspect XRGB8888 copied raw instead of converted to ARGB8888 with alpha 0xff (EVIDENCE 50).
+  Findings: display DMA only reaches low RAM (< 0x80000000), a new IDMA base address needs IDMA +0x1c bit 0 (VG_PINGPONG_UPDATE),
+  `/dev/mem` maps managed RAM cacheable (bad for scanout tests), Phosh blanks the CRTC after idle and wakes on the power button
+  only. The phone is left on m9e (stable, simpledrm). m10 images need the CMA module set in the rootfs (already installed).
 - NEXT: (1) the display driver (was "backlight control") (screen brightness; no backlight device yet, "No backlight"
   in the phoc log); (2) then the real DECON/DSI display driver (roadmap, with the CMU clock
   driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,

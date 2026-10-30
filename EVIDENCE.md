@@ -2725,3 +2725,23 @@ amended. Two separate causes had to be found; the m10c/m10d "frozen panel" came 
   picture written into the whole buffer still showed them, so the data and the CPU copy are not the cause: it is somewhere
   after the DMA (DECON, DSIM, panel). The same artifacts may be there under simpledrm (m9d); not checked yet. A flat grey
   picture (0x808080) looked fully white on the panel (no brightness/gamma setup yet).
+
+## 50. Bisect of the top-edge artifacts; phone left on m9e (2026-10-30, end of the evening)
+
+- **m9e** = the current config and DT (CONFIG_CMA, the low `linux,cma` pool) with the display driver OFF (`DECON` unset,
+  simpledrm drives the panel), sha256 `873ca78e…6844b1`. Jimmy: "no artifacts", and "the screen really responsive and
+  fast". With m10h (same config and DT, driver on) the top-edge artifacts are there, so **the artifacts come from my
+  driver, not from CMA, the DT or the kernel config.** `DECON=1` only sets `&decon { status = "okay"; }`.
+- Register snapshots (DECON 0..0x3ff, IDMA, DSIM) of m9d and m10h differ only in status bits that change from sample to
+  sample in command mode (IDMA +0x000 OP_STATUS, DECON +0x08c, FIFO levels at +0x260..0x26c): no configuration difference.
+  The driver only reads registers at probe, so the difference is in the pixels it writes.
+- Best hypothesis, not tested yet: **simpledrm converts XRGB8888 to the framebuffer's native ARGB8888 with alpha 0xff
+  (`drm_fb_blit`), my driver copies the pixels raw (`drm_fb_memcpy`)**, so the unused X byte reaches the DECON as pixel
+  alpha. Next step: use `drm_fb_blit(&dst, NULL, DRM_FORMAT_ARGB8888, shadow_state->data, state->fb, &rect,
+  &shadow_state->fmtcnv_state)` in `pipe_update` (and make the plane formats XRGB8888 only), build m10i, compare. Caveat:
+  a flat grey picture I wrote by hand (alpha 0xff, whole buffer) still showed the artifacts on m10h, which argues
+  against alpha; if the blit does not help, look at what else differs from simpledrm (mapping type of the scanout
+  memory: simpledrm uses `devm_ioremap_wc` too; the damage copy pattern; fbcon).
+- **State left on the phone:** BOOT = m9e (read back and verified), SYSTEM = the Nura rootfs with the CMA module set active
+  (it matches m9e and m10*); leftover module copies `/usr/lib/modules/7.2.0-a5y17lte.{cma,m9d,bak-m9d}` (about 2.4 MB each,
+  harmless). 0 failed services, Wi-Fi connected, no oops. No eMMC write is half done.
