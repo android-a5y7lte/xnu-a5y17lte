@@ -2703,3 +2703,25 @@ amended. Two separate causes had to be found; the m10c/m10d "frozen panel" came 
 - Open: the lag (software rendering by pixman in phoc and the vblank emulated by an hrtimer; the real DECON frame
   interrupt would give true vblank timing), the first-commit latch warning, then the DSIM + panel driver
   (brightness, power, AOD).
+
+## 49. Display driver: lag fixed by shadow buffers; top-edge artifacts (2026-10-30, Jimmy watching)
+
+- **Lag measured, not guessed.** m10f (DRM buffers scanned out directly, `dma_alloc_wc` memory): during touch interaction
+  phoc used about 95 % of a core and produced one frame every 0.79 s (buffer flips at 0.81, 1.60, 2.38, 3.16 s), 271
+  input events in 60 s. Cause: userspace maps the DMA GEM buffers write-combined and pixman *reads* the destination pixels
+  when it blends; reads from write-combined memory are very slow. (Recording tool: a python script on the phone that
+  samples IDMA +0x74 and the evdev devices with timestamps.)
+- **Fix (m10h, patch 0011 rewritten):** shmem GEM objects with shadow planes (cached memory, like simpledrm) and
+  `drm_fb_memcpy` of the damaged rectangles into the bootloader's framebuffer (0x67000000, `devm_ioremap_wc`); no address
+  flips any more, so neither CMA nor the PINGPONG_UPDATE write is needed (both stay in the tree and in the config: dropping
+  CONFIG_CMA would change `struct device` again and need new modules). phoc then used 25-73 % of a core while Jimmy swiped.
+  `pipe.disable` blanks the framebuffer: the m10f bottom-of-screen lines came from the idle blank (Phosh turns the CRTC off
+  after a while, power button wakes it, touch does not) leaving the DMA on a freed buffer (m10g fixed that by pointing the
+  DMA at memory the driver owns; m10h has the same property by construction).
+- Images: m10g (flip-based, blank buffer) `b896bc83…268b80`, m10h `3ce9d08a…ac3c68`; both flashed and read back on the phone.
+- **Open: artifacts along the top edge** (Jimmy: small lines, present on the lock screen, the passcode screen and on a flat
+  white/grey test picture, "persistent during normal use"; at the first boot of m10g/m10h they were there during the spinner).
+  The scanout buffer itself is clean (dumped through /dev/mem: the top 160 rows show a normal status bar), and a flat grey
+  picture written into the whole buffer still showed them, so the data and the CPU copy are not the cause: it is somewhere
+  after the DMA (DECON, DSIM, panel). The same artifacts may be there under simpledrm (m9d); not checked yet. A flat grey
+  picture (0x808080) looked fully white on the panel (no brightness/gamma setup yet).
