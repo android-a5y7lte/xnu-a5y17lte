@@ -1,4 +1,4 @@
-From 6a223fbc08c3b4b6f65504abd0db37a6456b3828 Mon Sep 17 00:00:00 2001
+From a38e46ff85d6b192649f2e6c604e1e99585c98c6 Mon Sep 17 00:00:00 2001
 From: Jimmy <fakeandroit@gmail.com>
 Date: Fri, 30 Oct 2026 17:49:57 +0200
 Subject: [PATCH] drm/tiny: add Exynos7880 DECON_F bootloader hand-off driver
@@ -29,8 +29,8 @@ Assisted-by: Claude:claude-sonnet-5-5
 ---
  drivers/gpu/drm/tiny/Kconfig            |  18 ++
  drivers/gpu/drm/tiny/Makefile           |   1 +
- drivers/gpu/drm/tiny/exynos7880-decon.c | 392 ++++++++++++++++++++++++
- 3 files changed, 411 insertions(+)
+ drivers/gpu/drm/tiny/exynos7880-decon.c | 403 ++++++++++++++++++++++++
+ 3 files changed, 422 insertions(+)
  create mode 100644 drivers/gpu/drm/tiny/exynos7880-decon.c
 
 diff --git a/drivers/gpu/drm/tiny/Kconfig b/drivers/gpu/drm/tiny/Kconfig
@@ -76,10 +76,10 @@ index 48d30bf61..e3cd2d5b7 100644
  obj-$(CONFIG_DRM_PIXPAPER)              += pixpaper.o
 diff --git a/drivers/gpu/drm/tiny/exynos7880-decon.c b/drivers/gpu/drm/tiny/exynos7880-decon.c
 new file mode 100644
-index 000000000..57af22117
+index 000000000..18d265f1a
 --- /dev/null
 +++ b/drivers/gpu/drm/tiny/exynos7880-decon.c
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,403 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Exynos7880 DECON_F display controller, bootloader hand-off
@@ -101,6 +101,7 @@ index 000000000..57af22117
 +#include <linux/dma-mapping.h>
 +#include <linux/hrtimer.h>
 +#include <linux/io.h>
++#include <linux/iopoll.h>
 +#include <linux/module.h>
 +#include <linux/of.h>
 +#include <linux/platform_device.h>
@@ -137,6 +138,7 @@ index 000000000..57af22117
 +#define  DECON_CHMAP_IDMA_G1		0	/* channel map of IDMA_G1 */
 +
 +/* IDMA_G1 registers */
++#define IDMA_PINGPONG_UPDATE		0x001c	/* BIT(0): latch the base address */
 +#define IDMA_BASE_ADDR			0x0074
 +
 +struct exynos7880_decon {
@@ -267,9 +269,18 @@ index 000000000..57af22117
 +	struct drm_plane_state *state = pipe->plane.state;
 +	struct drm_crtc *crtc = &pipe->crtc;
 +
-+	if (state->fb)
++	if (state->fb) {
++		u32 val;
++
++		/* the hardware clears the bit once it has latched the previous address */
++		if (readl_poll_timeout_atomic(decon->idma + IDMA_PINGPONG_UPDATE, val,
++					      !(val & BIT(0)), 100, 20000))
++			dev_warn_once(decon->drm.dev, "previous buffer address was not latched\n");
++
 +		writel(drm_fb_dma_get_gem_addr(state->fb, state, 0),
 +		       decon->idma + IDMA_BASE_ADDR);
++		writel(BIT(0), decon->idma + IDMA_PINGPONG_UPDATE);
++	}
 +
 +	if (crtc->state->event) {
 +		spin_lock_irq(&crtc->dev->event_lock);

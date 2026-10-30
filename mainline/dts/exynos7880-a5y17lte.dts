@@ -213,6 +213,18 @@
 			no-map;
 		};
 
+		/*
+		 * Default CMA pool, kept in the low RAM bank on purpose: the display DMA (DECON IDMA_G1)
+		 * fetches from 0x50000000 but not from the upper bank (0x80000000 and up; EVIDENCE 48),
+		 * and the default CMA otherwise lands at the top of RAM.
+		 */
+		linux,cma {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x5c000000 0x4000000>;
+			reusable;
+			linux,cma-default;
+		};
+
 		/* [D] extra_info */
 		extra-info@45fff000 {
 			reg = <0x0 0x45fff000 0x1000>;

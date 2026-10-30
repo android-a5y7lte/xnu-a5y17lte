@@ -2666,3 +2666,40 @@ EVIOC-style test: write a CMA buffer address to IDMA +0x74 by hand. Also found: 
 no version-check error: CONFIG_MODVERSIONS is off). Rule: the boot image's config and the rootfs modules must come from the same
 config; after a config change that touches core structures, install fresh modules (`build/modules`, built by
 build-mainline.sh) or rebuild the rootfs. Consider enabling CONFIG_MODVERSIONS to make such mismatches fail loudly.
+
+## 48. Display driver: the page flip works (2026-10-30, Jimmy watching the screen)
+
+**Result: m10f takes over the panel from simpledrm; the Phosh lock screen shows and reacts to touch (Jimmy: "works but
+a bit laggy").** Image `out/a5y17lte-mainline-m10f-boot.img`, sha256 `365518e8…89087f`, 15362064 B; patch 0011
+amended. Two separate causes had to be found; the m10c/m10d "frozen panel" came from both.
+
+1. **Reach (m10e, Jimmy's flip tests):** pointing IDMA_G1 at low RAM (0x50000000) changed the picture, the upper bank
+   (0x80000000, 0xc0000000, 0xfb800000) did not show. The default CMA had landed at 0xfb800000. Fix: a DT
+   `reserved-memory` node `linux,cma` (shared-dma-pool, reusable, linux,cma-default) at 0x5c000000, 64 MiB (free low
+   RAM is 0x52a00000-0x66ffffff). m10e: CMA at 0x5c000000, driver buffers at 0x5c100000/0x5c900000/0x5d100000, but
+   the panel was still frozen.
+2. **Latching (this was the real bug):** writing IDMA_G1 +0x74 alone never changed the picture on any boot
+   (m9d, m10e, driver unbound, with a DECON SHADOW_REG_UPDATE_REQ at +0x60 or a HW-trigger mask/unmask pulse).
+   The vendor VPP code (decon_7880/vpp, read-only, Jimmy allowed it: `vpp_reg_set_in_buf_addr`) writes the base
+   address (VG_BASE_ADDR_Y(0) = +0x74) and then **VG_PINGPONG_UPDATE (+0x1c) bit 0 = 1**; the hardware clears it
+   when the address is latched (cleared within 2-8 ms here). With that write a manual flip to 0x673F4800 gave
+   half green/half black, to 0x67800000 a solid green picture, 0x67700000 mostly green (green buffer filled by
+   hand at 0x67800000; Jimmy's description). Painting the buffer that is already scanned (0x67000000, red) always
+   worked, which is why the display looked "half alive" and the earlier flips were misread.
+   Driver: `pipe_update` waits (up to 20 ms, `readl_poll_timeout_atomic`) for the bit to clear, writes the address,
+   writes BIT(0) to +0x1c. At boot dmesg shows one `previous buffer address was not latched` from the first two
+   back-to-back fbdev commits (the bit takes about a frame to clear); harmless so far, to look at.
+- Checked and not the cause: DECON/IDMA/DSIM register snapshots of m9d and m10e differ only in counters and the IDMA
+  address; FRAME_ID (+0x2a0) counts 60 per second; the DRM atomic commits were all accepted; simple-framebuffer has
+  no clocks or power domains to release at eviction.
+- Pitfalls: (a) `/dev/mem` maps RAM that Linux manages (the CMA buffers) cacheable, so writes there may sit in the
+  CPU cache and not reach what the DMA reads: for scanout tests use reserved no-map memory (0x67000000+) or the driver's own
+  buffers through DRM. (b) Stopping phoc makes the kernel switch the scanout back to the fbcon buffer (IDMA changed
+  from 0x5c900000 to 0x5c100000), so a "paint the current address" test must re-read the register first.
+  (c) `/dev/fb0` does not exist (no CONFIG_FB_DEVICE), the fbdev emulation has no device node.
+- Module/boot-image pairing again: m10 images have CONFIG_CMA, so SYSTEM now has the CMA module set in
+  `/usr/lib/modules/7.2.0-a5y17lte` (copies kept as `.cma`, `.m9d`, `.bak-m9d`; swap them with `cp -a` + `depmod` when
+  going back to an image without CMA, e.g. m9d). A rootfs rebuild will pick up the CMA modules by itself.
+- Open: the lag (software rendering by pixman in phoc and the vblank emulated by an hrtimer; the real DECON frame
+  interrupt would give true vblank timing), the first-commit latch warning, then the DSIM + panel driver
+  (brightness, power, AOD).
