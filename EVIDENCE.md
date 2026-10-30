@@ -2619,3 +2619,14 @@ made from commits on the `a5y17lte` branch of `upstream/linux`, `checkpatch --st
 note and spelling false positives), `Assisted-by: Claude:claude-sonnet-5-5`, no Signed-off-by. Kernel package 7.2-r4 lists
 them. The driver is still untested on the phone (image `m10a`, `DECON=1 ./build-mainline.sh`; the node is disabled by
 default). The DT node stays in `mainline/dts` (`&decon`, status disabled).
+
+## 47. Display driver test, first step (2026-10-30)
+
+Wrong lock-screen code stays locked, the correct one unlocks by itself (Jimmy, confirmed). Display test image
+`m10b` = `DECON=1 MILESTONE=m10b ./build-mainline.sh` (DT node `&decon` enabled; driver built in; all the other
+current features). To read after the boot: `dmesg` ("adopted the bootloader pipeline"), `/dev/dri/card0` driver name
+`exynos7880-decon`, connector name (`DSI-1`, physical size 65x115 mm), Phosh/phoc starting, touch, no hang. `phoc.ini`
+now sets scale 2 for both connector names (`Unknown-1` = simpledrm, `DSI-1` = the new driver); device package 3-r10.
+Recovery if the display stays dark: Volume Down + Power, TWRP (Volume Up + Home + Power), flash `m9d`.
+Note: the PC lost the USB link to the phone during this work (phone's usb0 NO-CARRIER, no adb, no `enx` on the PC)
+while Wi-Fi kept working (192.168.2.31); TWRP and flashing need the USB cable, so check it first.
