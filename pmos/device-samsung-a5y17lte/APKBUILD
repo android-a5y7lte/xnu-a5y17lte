@@ -3,7 +3,7 @@ maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=device-samsung-a5y17lte
 pkgdesc="Samsung Galaxy A5 (2017)"
 pkgver=3
-pkgrel=8
+pkgrel=9
 url="https://github.com/android-a5y7lte/xnu-a5y17lte"
 license="MIT"
 arch="aarch64"
@@ -13,7 +13,7 @@ replaces="greetd-agreety-config"
 depends="
 	linux-postmarketos-exynos7880
 	postmarketos-base
-	phosh
+	phosh>=0.58.0-r1
 	phoc
 	squeekboard
 	greetd

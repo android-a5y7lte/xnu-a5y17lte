@@ -8,3 +8,7 @@ picture-options='zoom'
 [org.gnome.desktop.screensaver:Phosh]
 picture-uri='file:///usr/share/phosh/backgrounds/byzantium-abstract-720x1440.jpg'
 picture-options='zoom'
+
+# Needs the patched phosh (pmos/phosh, 0.58.0-r1): unlock automatically at this passcode length
+[sm.puri.phosh.lockscreen:Phosh]
+autosubmit-length=6
