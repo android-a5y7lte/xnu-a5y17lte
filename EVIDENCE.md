@@ -2640,3 +2640,15 @@ memory but does not evict the owner (simpledrm already held 0x67000000), hence -
 screen never went away. Fix (patch 0011 amended): call `aperture_remove_conflicting_devices()` instead,
 as late as possible, right before `drm_dev_register()`, so an earlier failure still leaves simpledrm running. Image
 `m10c`. Note: this also gave the first test of the "probe on a running pipeline" checks on the real hardware.
+
+**m10c result (Jimmy, 2026-10-30): the driver took over but the display froze.** The screen stays on the
+last simpledrm console line ("simpledrm … frame buffer device"); the phone itself runs fine (SSH over Wi-Fi). dmesg:
+`[drm] Initialized exynos7880-decon 1.0.0 … on minor 1`, `*ERROR* fbdev: Failed to setup emulation (ret=-12)`,
+`adopted the bootloader pipeline: 1080x1920, framebuffer at 0x67000000`; sysfs: `card1` (driver exynos7880-decon),
+`card1-DSI-1 connected 1080x1920`, `enabled=disabled`; 16.8 s after boot phoc triggers a WARNING in
+`__drm_atomic_helper_set_config` (via drm_client_modeset_commit, drm_release). Cause: ENOMEM, an 8.3 MB framebuffer
+must be one physically contiguous DMA block, and without CMA the largest block is 4 MB (MAX_PAGE_ORDER 10), so neither
+fbdev emulation nor phoc's dumb buffers could be allocated, and nothing new was ever scanned out (the panel keeps
+showing the last simpledrm frame, DECON/IDMA untouched). Fix: `CONFIG_CMA=y`, `CONFIG_DMA_CMA=y`,
+`CONFIG_CMA_SIZE_MBYTES=64` (default area). Image `m10d`. Hardware facts confirmed: the pipeline adoption
+(checks, aperture eviction, DRM registration, connector with the DT mode) works on the real phone.
