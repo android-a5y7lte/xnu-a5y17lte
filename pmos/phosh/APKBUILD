@@ -11,7 +11,7 @@ pkgrel=1
 pkgdesc="Wayland shell for GNOME on mobile devices"
 # armhf: blocked by gnome-shell-schemas
 arch="all !armhf"
-options="!check"
+options="!check pmb:cross-native2"
 url="https://gitlab.gnome.org/World/Phosh/phosh"
 license="GPL-3.0-only"
 triggers="$pkgname.trigger=/usr/lib/phosh/plugins/prefs"
@@ -64,12 +64,9 @@ makedepends="
 	wayland-protocols
 	"
 checkdepends="xvfb-run xmlstarlet"
-# the ordering here is important - libphosh split functions need to run first to move the libphosh-0
-# headers/pkgconfig/lib into the libphosh packages, before the top level -dev package gobbles
-# up the rest.
+# libphosh (the bindings library) and its -dev package are not built: the GObject-introspection
+# step has to run target binaries, which does not work in the cross build (EVIDENCE 46).
 subpackages="
-	libphosh:libs
-	libphosh-dev:libphosh_dev
 	$pkgname-dbg
 	$pkgname-dev
 	$pkgname-doc
@@ -95,7 +92,9 @@ build() {
 		-Db_lto=true \
 		-Dphoc_tests=disabled \
 		-Dman=true \
-		-Dbindings-lib=true \
+		-Dbindings-lib=false \
+		-Dintrospection=false \
+		-Dvapi=false \
 		. output
 	meson compile -C output
 }
@@ -111,12 +110,6 @@ package() {
 portalsconf() {
 	install_if="$pkgname=$pkgver-r$pkgrel xdg-desktop-portal>=1.17.1"
 	amove usr/share/xdg-desktop-portal/phosh-portals.conf
-}
-
-libphosh_dev() {
-	amove usr/include/libphosh-*
-	amove usr/lib/libphosh-*.so
-	amove usr/lib/pkgconfig/libphosh-*.pc
 }
 
 schemas() {

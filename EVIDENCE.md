@@ -2599,3 +2599,16 @@ package `pmos/phosh/APKBUILD` = Alpine's recipe with pkgrel 1 (so apk prefers it
 (copied from pmos/phosh). Default stays 0 in the schema; the device package's gschema override sets
 `autosubmit-length=6` (the passcode is 6 digits). Each automatic try counts as one failed login if the entered passcode is
 wrong, so the value must be the passcode length (a longer passcode would be tried at its first 6 characters).
+
+**Result (Jimmy, 2026-10-30): the lock screen unlocks by itself after the sixth digit.** Build story: the recipe
+needs Alpine's companion file `phosh.trigger`; plain `pmbootstrap build` builds for the host (x86_64), so
+`--arch aarch64`; emulated native builds fail (`cc: cannot execute 'cc1'`), the cross mode `pmb:cross-native`
+did not give meson a cross file, `pmb:cross-native2` did; then the GObject-introspection step for `libphosh`
+had to run target binaries, so the bindings library is not built (`-Dbindings-lib=false -Dintrospection=false
+-Dvapi=false`, subpackages libphosh/libphosh-dev removed; neither was installed on the phone). The patch applied
+cleanly. Built `phosh-0.58.0-r1` (+ schemas, portalsconf, lang, dev, doc, dbg, systemd); the binary and the compiled
+schema both contain `autosubmit-length`. Installed on the phone with `apk add --allow-untrusted`
+(phosh, phosh-schemas, phosh-portalsconf, phosh-lang), the device package's schema override
+(`autosubmit-length=6`) added and compiled, session restarted: `gsettings` reads `uint32 6`. `build-pmos.sh`
+now copies pmos/phosh to pmaports/temp and builds it (`pmb build --arch aarch64 phosh`) before the image.
+Not yet tried: a wrong six-digit code (expected: refused once, entry cleared).

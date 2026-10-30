@@ -72,6 +72,9 @@ grep -q "^$KERNEL_SHA512  linux-7.2.tar.xz$" "$PMA/device/testing/$K/APKBUILD" |
 	{ echo "linux-7.2.tar.xz checksum does not match the pinned one"; exit 1; }
 
 echo "== build + install (console UI, SSH)"
+# the patched phosh (auto-unlock at a passcode length, EVIDENCE 46): Alpine's recipe + our patch, cross built
+rm -rf "$PMA/temp/phosh"; cp -r "$ROOT/pmos/phosh" "$PMA/temp/phosh"
+pmb build --arch aarch64 phosh
 pmb build --force "$K" "$DEV"
 # --zap: a fresh rootfs every time (post-install scripts, no upgrade leftovers)
 pmb install --zap --split --password "${A5_PMOS_PASSWORD:-147147}"
