@@ -2790,3 +2790,27 @@ Tools: python on the phone writing the DSIM registers through /dev/mem (header a
   black until it is right). Not started.
 - Test scripts were scratch files (not in the repo); the phone was left as it was (ESCMODE and the DECON trigger restored after
   each test, display unchanged, m10i still booted).
+
+## 53. Panel reset experiments and why S-Boot's DSIM state is not enough (2026-10-31, Jimmy watching)
+
+- **gpd3-4 is the panel reset** (vendor DT `gpio_lcd_rst = <&gpd3 4 0x1>` in every a5y17/a7y17 variant; Linux: `gpiochip10` line 4;
+  vendor sequence: 1 ms, high, 5 ms, low, 5 ms, high, 10 ms; high = run). Driving it low blanked the panel (Jimmy: "black
+  screen"), so the pad really controls it. S-Boot leaves the pad as an input; once it has been driven, the line must be held
+  high by software (a `gpioset` process held it; after the process died the pad stayed low and the panel stayed in reset;
+  a reboot restores S-Boot's state). `gpioset -p 6ms` does NOT release the line after the period (it needed a timeout to die),
+  and starting a second `gpioset` while the first holds the line fails silently (an early "reset" test therefore never pulsed).
+- **Commands only leave the DSIM while the panel provides TE (or the main image path is in standby):** after the panel was in
+  reset/sleep the SFR packets stayed in the header FIFO (FIFOCTRL bits 21:16 = 6 pending, INTSRC 0x23480000 with
+  ABNORMAL_CMD_ST bit 22 and HSYNC_TOUT bit 19), even with SFR_CTRL standby cleared and the FIFO re-initialised. The link was
+  then stuck until a reboot. So a panel re-init on top of S-Boot's DSIM state does not work.
+- **Vendor behaviour:** with "LCD ON UBOOT" the vendor driver does not re-initialise the DSIM (only `dsim_reg_set_standby(0)`) and
+  keeps S-Boot's PLL and D-PHY timings, yet its commands work. Our commands on the running panel were answered with
+  `0x13800402` (ack with error report 0x8004: EoT sync error + protocol violation) in all HS/LP and trigger combinations, with
+  clean FIFO handling, so the cause is still unknown. Possible differences from the vendor boot: its LPD / PACKET_GO handling
+  around commands, or state S-Boot leaves that the vendor kernel changes when it enables the DECON (not found in the read files).
+- **Conclusion for the takeover:** do the whole bring-up in our own code: panel power (regulators LCD_3P0/LCD_1P8 on the S2MPU05,
+  numbers still unknown; they were never switched in these tests), reset pulse, DSIM software reset and re-init (vendor
+  `dsim_reg_init`/`dsim_reg_set_clocks`/`set_lanes`: PLL PMS 3/230/1 from 26 MHz, escape clock 16 MHz, D-PHY timing table,
+  config, command-mode TE registers), panel init sequence (sleep out, test keys, common settings, brightness, TE on, display on:
+  vendor `s6e3fa3_init`/`s6e3fa3_displayon`), then hand the DECON trigger back. Prototype it as scripts on the live phone first
+  (a failure only costs a reboot), then as a driver. Not started beyond the experiments above.
