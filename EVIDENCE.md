@@ -2814,3 +2814,31 @@ Tools: python on the phone writing the DSIM registers through /dev/mem (header a
   config, command-mode TE registers), panel init sequence (sleep out, test keys, common settings, brightness, TE on, display on:
   vendor `s6e3fa3_init`/`s6e3fa3_displayon`), then hand the DECON trigger back. Prototype it as scripts on the live phone first
   (a failure only costs a reboot), then as a driver. Not started beyond the experiments above.
+
+## 54. DSIM + panel bring-up prototype: what works, what is missing (2026-10-31, Jimmy watching)
+
+Prototype = python on the phone through /dev/mem (DSIM 0x14800000, DECON 0x14830000) plus `gpioset` for the panel reset
+(gpd3-4); a reboot always restores the screen (S-Boot re-initialises everything).
+- **S-Boot's DSIM configuration is the vendor driver's, bit for bit:** PLL 0x806731 (P/M/S 3/230/1, 26 MHz in, ~997 Mbit/s), PLL_CTRL1
+  0x40000000, PLLTMR 0x13880, PHYCTRL 0x04000000, M2 0x10000000, D-PHY timing 0x70c / 0x082b0d09 / 0x00090f0c (the 1000 Mbit/s row of the
+  vendor table: clk_prepare 8, zero 43, post 13, trail 9, hs_prepare 9, zero 15, trail 12, lpx 7, hs_exit 12), CLKCTRL 0x00131f08 (esc
+  divider 8), timeouts 0xffffffff / 0x3f, ESCMODE 0x01400000 (stop-state count 10), TE controls 0x00400061 (stable VFP 64, vsync timeout 97). The
+  hardware config therefore needs no re-derivation; only the SEQUENCE matters.
+- **Vendor power-on order (`dsim_enable`):** panel regulators on, PHY power, PLL + D-PHY timing + wait lock, lanes on + wait stop
+  state, `dsim_reg_init` (esc/byte clocks, config, timing, TE regs), panel reset pulse (1 ms, high, 5 ms, low, 5 ms, high, 10 ms), then
+  `dsim_reg_start` (HS clock request, standby on, interrupts), then the panel commands. With "LCD ON UBOOT" the vendor driver skips all of that
+  (only standby off).
+- **Prototype result (full DSIM stop, sw reset, vendor order, reset pulse):** PLL locks, lanes reach stop state, and on the fresh panel
+  **every init command drains instantly** (sleep out 0x11, test keys F0/FC 5A 5A and A5 A5 as long writes, display on 0x29, normal mode 0x13,
+  TE on) *provided the HS clock request (CLKCTRL bit 20) is on*; with HS requested off nothing leaves the FIFO.
+- **Packet type finding:** the DSIM stalls (header FIFO fills, BTA with the error report `13800402` = EoT sync + protocol violation) on short
+  writes WITH a parameter (type 0x15, e.g. TE on `35 00`) and on the max-return-size (0x37) / read request (0x06) pair, i.e. every read
+  fails the same way. No-parameter short writes (0x05) and long writes (0x39) are fine: **TE on sent as a long write `39 | len 2 | 35 00` works** and
+  nothing stalls. Cause unknown (the header layout is the vendor's `id | d0 << 8 | d1 << 16`). Consequence: panel reads (needed for the vendor
+  brightness, which uses the MTP calibration data) are still unsolved; display on/off and fixed settings are fine.
+- **Missing piece:** after the DSIM was reset the DECON no longer starts frames: FRAME_ID (+0x2a0) stays frozen, GLOBAL_CONTROL reads 0x133 (idle
+  flag set) instead of 0x113, a global shadow update request and manual SW triggers (+0x70 bit 8) do nothing, so the panel (command mode, frames
+  on TE) stays black. The full takeover therefore needs the DECON re-initialised in the vendor order (`decon_reg_init`/`decon_reg_start`, allowed
+  file `decon_reg_7880.c`) after the DSIM. The 2 s "picture back" Jimmy saw in the middle of the experiments was without TE and did not last.
+- Scratch scripts only (not in the repo). Pitfalls: `gpioset -p` does not exit after the period, a second `gpioset` on a held line fails silently,
+  the reset pad must be held high by a process once it was driven, and `/tmp` on the phone is cleared by every reboot.
