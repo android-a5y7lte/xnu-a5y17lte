@@ -2869,3 +2869,25 @@ wait run, unmask trigger).
   possible while reads fail); (4) a logic analyser/scope is not available, so DSI traffic cannot be observed. A full mainline takeover
   (`samsung-dsim` + panel driver + DECON driver) would face the same unknown.
 - Nothing from the prototype is in the repo (scratch scripts); the phone is back on S-Boot's display state (m10i, rebooted).
+
+## 56. Software dimming: a backlight device and Phosh's brightness slider (2026-10-31, Jimmy watching)
+
+**Result: m10j (`out/a5y17lte-mainline-m10j-boot.img`, sha256 `1d328a78…d99802`) gives the phone a brightness slider in Phosh that dims
+the whole screen smoothly and cleanly (Jimmy: "I see the brightness slider and it works").** Chosen after the panel bring-up
+(EVIDENCE 52-55) failed to get real panel commands working.
+- **Driver (patch 0011, same file):** `devm_backlight_device_register("exynos7880-decon")`, type raw, 0-255, default 255. `update_status` maps
+  the level (clamped to 8..255, never fully black) to a pixel scale `dim = int_sqrt(b * 65536 / 255)` (256 = full: pixels are gamma encoded,
+  the square root makes the steps feel even); when `dim < 256` the damage copy uses `exynos7880_decon_copy_dimmed()` (two multiplies per
+  pixel: R/B together, G alone; alpha forced to 0xff, written with `__raw_writel` into the write-combined scanout), otherwise the fast
+  `drm_fb_xrgb8888_to_argb8888()`; a level change repaints with `drm_atomic_helper_dirtyfb(fb, NULL, 0, 0, NULL, 0)` (full damage commit). Kconfig
+  selects BACKLIGHT_CLASS_DEVICE. Dimming pixels also lowers the AMOLED's power.
+- **Phosh 0.58 drives it itself** (`backlight-sysfs.c`, `brightness-manager.c` are in the binary; gnome-settings-daemon 51.1's `gsd-power`
+  exports no `Power.Screen` interface for it, which does not matter). The quick-settings slider appears and works; before, phoc logged "No backlight".
+  Manual test: `echo 128 > /sys/class/backlight/exynos7880-decon/brightness` dims to about half, 40 is dark, 255 is full, picture clean.
+- **Hardware dimming through the DECON blender did not work** (live /dev/mem tests; kept here so nobody repeats them): changing the alpha bytes of
+  `WIN_CONTROL(0)` has no effect (window 0 is the bottom layer, FUNC = COPY, ALPHA_SEL = 2 = by pixel alpha); a black map-colour window 1
+  (`WIN_CONTROL(1)` = alpha | CHMAP | FUNC 0xd | MAPCOLOR_EN | EN, `WIN_COLORMAP(1)` = 0, start/end/pixel count copied from window 0, global shadow update)
+  showed nothing for CHMAP 0 and for CHMAP 1. Vendor constants: PD_FUNC_COPY 1, SOURCE_OVER 3, LEGACY 0xd, LEGACY2 0xe; ALPHA_SEL 0/1 = plane alpha 0/1,
+  2 = by pixel alpha, 4 = multiplied.
+- Not done: the brightness is not saved over a reboot (255 at boot); no ambient-light auto brightness (no sensors yet); real panel brightness/AOD
+  still wait for the panel command path (EVIDENCE 55).

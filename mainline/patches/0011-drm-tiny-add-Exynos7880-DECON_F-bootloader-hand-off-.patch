@@ -1,4 +1,4 @@
-From 24a5289cb796f4e248364ad924293d67d8bf41d3 Mon Sep 17 00:00:00 2001
+From 98b62814612e43786849f8a3df4e676e7e5c50e1 Mon Sep 17 00:00:00 2001
 From: Jimmy <fakeandroit@gmail.com>
 Date: Fri, 30 Oct 2026 17:49:57 +0200
 Subject: [PATCH] drm/tiny: add Exynos7880 DECON_F bootloader hand-off driver
@@ -21,6 +21,11 @@ base address and then its PINGPONG_UPDATE bit) works, but rendering into
 write-combined scanout buffers is far too slow for compositors that read
 the pixels they blend over.
 
+The panel has no backlight chip and its commands cannot be used yet,
+so the brightness is a software dimming: a backlight class device sets
+a pixel scale that the copy into the framebuffer applies (a change
+repaints the picture).
+
 Nothing else is touched: the DSI link, the panel, the clocks and the power
 domains stay as the bootloader left them. The vertical blank is emulated
 with a timer for now. Only packed buffers of the panel size are accepted.
@@ -30,17 +35,17 @@ checked against the vendor driver.
 
 Assisted-by: Claude:claude-sonnet-5-5
 ---
- drivers/gpu/drm/tiny/Kconfig            |  18 +
+ drivers/gpu/drm/tiny/Kconfig            |  19 +
  drivers/gpu/drm/tiny/Makefile           |   1 +
- drivers/gpu/drm/tiny/exynos7880-decon.c | 440 ++++++++++++++++++++++++
- 3 files changed, 459 insertions(+)
+ drivers/gpu/drm/tiny/exynos7880-decon.c | 527 ++++++++++++++++++++++++
+ 3 files changed, 547 insertions(+)
  create mode 100644 drivers/gpu/drm/tiny/exynos7880-decon.c
 
 diff --git a/drivers/gpu/drm/tiny/Kconfig b/drivers/gpu/drm/tiny/Kconfig
-index f0e72d4b6..b281b3102 100644
+index f0e72d4b6..08fe7b8bb 100644
 --- a/drivers/gpu/drm/tiny/Kconfig
 +++ b/drivers/gpu/drm/tiny/Kconfig
-@@ -24,6 +24,24 @@ config DRM_ARCPGU
+@@ -24,6 +24,25 @@ config DRM_ARCPGU
  
  	  If M is selected the module will be called arcpgu.
  
@@ -49,6 +54,7 @@ index f0e72d4b6..b281b3102 100644
 +	depends on DRM && OF
 +	depends on ARCH_EXYNOS || COMPILE_TEST
 +	select APERTURE_HELPERS
++	select BACKLIGHT_CLASS_DEVICE
 +	select DRM_CLIENT_SELECTION
 +	select DRM_GEM_SHMEM_HELPER
 +	select DRM_KMS_HELPER
@@ -79,10 +85,10 @@ index 48d30bf61..e3cd2d5b7 100644
  obj-$(CONFIG_DRM_PIXPAPER)              += pixpaper.o
 diff --git a/drivers/gpu/drm/tiny/exynos7880-decon.c b/drivers/gpu/drm/tiny/exynos7880-decon.c
 new file mode 100644
-index 000000000..e99695070
+index 000000000..9f531bf93
 --- /dev/null
 +++ b/drivers/gpu/drm/tiny/exynos7880-decon.c
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,527 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Exynos7880 DECON_F display controller, bootloader hand-off
@@ -96,15 +102,21 @@ index 000000000..e99695070
 + * copied there. Rendering straight into write-combined scanout buffers is
 + * unusably slow, because compositors read the pixels they blend over.
 + *
++ * The panel has no backlight chip and the panel commands are out of reach for now,
++ * so the brightness is a software dimming: the copy into the framebuffer scales the
++ * pixels and a backlight class device sets the scale.
++ *
 + * Nothing else is touched: the DSI link, the panel, the clocks and the power
 + * domains stay as the bootloader left them. The vertical blank is emulated with
 + * a timer.
 + */
 +
 +#include <linux/aperture.h>
++#include <linux/backlight.h>
 +#include <linux/bitfield.h>
 +#include <linux/dma-mapping.h>
 +#include <linux/hrtimer.h>
++#include <linux/math.h>
 +#include <linux/io.h>
 +#include <linux/module.h>
 +#include <linux/of.h>
@@ -158,6 +170,8 @@ index 000000000..e99695070
 +	u32 height_mm;
 +	struct hrtimer vblank_timer;
 +	ktime_t vblank_period;
++	struct backlight_device *bl;
++	unsigned int dim;		/* pixel scale, 256 = full brightness */
 +};
 +
 +static struct exynos7880_decon *to_decon(struct drm_device *drm)
@@ -268,6 +282,29 @@ index 000000000..e99695070
 +	return 0;
 +}
 +
++/* Copy a rectangle of XRGB8888/ARGB8888 pixels, scaled by dim/256, as ARGB8888 with alpha 0xff */
++static void exynos7880_decon_copy_dimmed(struct exynos7880_decon *decon,
++					 const struct iosys_map *src,
++					 const struct drm_framebuffer *fb,
++					 const struct drm_rect *rect)
++{
++	unsigned int dst_pitch = decon->mode.hdisplay * 4;
++	unsigned int width = drm_rect_width(rect), y, x;
++
++	for (y = rect->y1; y < rect->y2; y++) {
++		const u32 *in = src[0].vaddr + y * fb->pitches[0] + rect->x1 * 4;
++		u32 __iomem *out = decon->screen + y * dst_pitch + rect->x1 * 4;
++
++		for (x = 0; x < width; x++) {
++			u32 p = in[x];
++			u32 rb = (((p & 0x00ff00ff) * decon->dim) >> 8) & 0x00ff00ff;
++			u32 g = (((p & 0x0000ff00) * decon->dim) >> 8) & 0x0000ff00;
++
++			__raw_writel(0xff000000 | rb | g, out + x);
++		}
++	}
++}
++
 +static void exynos7880_decon_pipe_disable(struct drm_simple_display_pipe *pipe)
 +{
 +	struct exynos7880_decon *decon = pipe_to_decon(pipe);
@@ -302,7 +339,10 @@ index 000000000..e99695070
 +			iosys_map_incr(&dst, drm_fb_clip_offset(dst_pitch, dst_format, &rect));
 +
 +			/* the bootloader's framebuffer is ARGB8888 with the alpha at 0xff */
-+			if (state->fb->format->format == DRM_FORMAT_XRGB8888)
++			if (decon->dim < 256)
++				exynos7880_decon_copy_dimmed(decon, shadow_state->data,
++							     state->fb, &rect);
++			else if (state->fb->format->format == DRM_FORMAT_XRGB8888)
 +				drm_fb_xrgb8888_to_argb8888(&dst, &dst_pitch, shadow_state->data,
 +							    state->fb, &rect,
 +							    &shadow_state->fmtcnv_state);
@@ -338,6 +378,47 @@ index 000000000..e99695070
 +	.fb_create = drm_gem_fb_create_with_dirty,
 +	.atomic_check = drm_atomic_helper_check,
 +	.atomic_commit = drm_atomic_helper_commit,
++};
++
++/* Repaint the whole picture, for a new dimming level */
++static void exynos7880_decon_redraw(struct exynos7880_decon *decon)
++{
++	struct drm_framebuffer *fb;
++
++	drm_modeset_lock_all(&decon->drm);
++	fb = decon->pipe.plane.state ? decon->pipe.plane.state->fb : NULL;
++	if (fb)
++		drm_framebuffer_get(fb);
++	drm_modeset_unlock_all(&decon->drm);
++
++	if (fb) {
++		drm_atomic_helper_dirtyfb(fb, NULL, 0, 0, NULL, 0);
++		drm_framebuffer_put(fb);
++	}
++}
++
++static int exynos7880_decon_bl_update(struct backlight_device *bl)
++{
++	struct exynos7880_decon *decon = bl_get_data(bl);
++	int brightness = backlight_get_brightness(bl);
++	unsigned int dim;
++
++	/* never go fully black: 3 % is still readable and cannot lock anybody out */
++	brightness = clamp(brightness, 8, 255);
++	/* the pixels are gamma encoded: the square root makes the steps feel even */
++	dim = int_sqrt(brightness * 65536 / 255);
++	if (dim == decon->dim)
++		return 0;
++
++	decon->dim = dim;
++	if (decon->bl)
++		exynos7880_decon_redraw(decon);
++
++	return 0;
++}
++
++static const struct backlight_ops exynos7880_decon_bl_ops = {
++	.update_status = exynos7880_decon_bl_update,
 +};
 +
 +DEFINE_DRM_GEM_FOPS(exynos7880_decon_fops);
@@ -389,6 +470,7 @@ index 000000000..e99695070
 +	struct device *dev = &pdev->dev;
 +	struct device_node *np = dev->of_node;
 +	struct exynos7880_decon *decon;
++	struct backlight_properties props = { };
 +	struct drm_device *drm;
 +	dma_addr_t fb_addr;
 +	int ret;
@@ -418,6 +500,7 @@ index 000000000..e99695070
 +	if (ret)
 +		return ret;
 +
++	decon->dim = 256;
 +	decon->screen = devm_ioremap_wc(dev, fb_addr,
 +					decon->mode.hdisplay * decon->mode.vdisplay * 4);
 +	if (!decon->screen)
@@ -481,6 +564,16 @@ index 000000000..e99695070
 +		return ret;
 +
 +	drm_client_setup_with_fourcc(drm, DRM_FORMAT_XRGB8888);
++
++	props.type = BACKLIGHT_RAW;
++	props.max_brightness = 255;
++	props.brightness = 255;
++	decon->bl = devm_backlight_device_register(dev, "exynos7880-decon", dev, decon,
++						   &exynos7880_decon_bl_ops, &props);
++	if (IS_ERR(decon->bl)) {
++		dev_warn(dev, "no backlight: %pe\n", decon->bl);
++		decon->bl = NULL;
++	}
 +
 +	platform_set_drvdata(pdev, drm);
 +

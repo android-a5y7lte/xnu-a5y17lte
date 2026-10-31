@@ -171,15 +171,16 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   `MCU_RST_N(SSP_RST)` on gpf4-2); mainline has no SSP/sensor-hub driver, so this is one hub driver
   (plus firmware loading questions) rather than one driver per sensor; ties into auto-rotate and
   proximity screen-off in Phosh.
-- DISPLAY DRIVER WORKS (EVIDENCE 47-51, 2026-10-31): m10i (patches 0010/0011, `DECON=1 MILESTONE=... ./build-mainline.sh`) shows Phosh through
-  our DECON hand-off driver: shmem shadow planes, damage rectangles copied (ARGB8888, offset to the rectangle's position) into S-Boot's
-  framebuffer at 0x67000000; fast and clean (Jimmy confirmed). The earlier top-edge artifacts were a missing destination offset in
-  the damage copy. m9e = same config/DT with the driver off (simpledrm, also fine). Findings: the display DMA only reaches low RAM
-  (< 0x80000000), a new IDMA base address needs IDMA +0x1c bit 0 (VG_PINGPONG_UPDATE) (direct scanout works but is not used: userspace
-  rendering into write-combined buffers is far too slow), `/dev/mem` maps managed RAM cacheable (bad for scanout tests), Phosh blanks
-  the CRTC after idle and wakes on the power button only (touch does not wake it). m10 images need the CMA module set in the rootfs
-  (installed on SYSTEM; copies .cma/.m9d/.bak-m9d are left in /usr/lib/modules). Still no brightness, power or AOD control: that is
-  the DSIM + panel driver, next.
+- DISPLAY DRIVER WORKS (EVIDENCE 47-56, 2026-10-31): m10j (patches 0010/0011, `DECON=1 MILESTONE=... ./build-mainline.sh`) shows Phosh through
+  our DECON hand-off driver: shmem shadow planes, damage rectangles copied (ARGB8888, offset to each rectangle's position) into S-Boot's
+  framebuffer at 0x67000000; fast and clean, plus a **software-dimming backlight device** (`/sys/class/backlight/exynos7880-decon`, pixel scale
+  applied in the copy) that Phosh's brightness slider drives (Jimmy confirmed). m9e = same config/DT with the driver off (simpledrm). Findings:
+  the display DMA only reaches low RAM (< 0x80000000), a new IDMA base address needs IDMA +0x1c bit 0, `/dev/mem` maps managed RAM cacheable,
+  Phosh blanks the CRTC after idle and wakes on the power button only. m10 images need the CMA module set in the rootfs (installed on SYSTEM).
+  PANEL COMMANDS DO NOT WORK from Linux (EVIDENCE 52-55): S-Boot's DSIM/D-PHY config equals the vendor's bit for bit, a full DECON+DSIM+panel
+  bring-up prototype (python via /dev/mem, vendor order, gpd3-4 = panel reset) gets every command to drain and the DECON to send frames (SW trigger),
+  but the panel stays black and never answers reads (error report 0x8004); no command ever had a visible effect. Untested: panel supplies LCD_3P0/LCD_1P8
+  (S2MPU05 LDOs, numbers unknown), the PCD pad pinctrl, D-PHY reset / PMU PHY power. So real brightness/AOD/power-off are open; software dimming is the stand-in.
 - NEXT: (1) the display driver (was "backlight control") (screen brightness; no backlight device yet, "No backlight"
   in the phoc log); (2) then the real DECON/DSI display driver (roadmap, with the CMU clock
   driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,
