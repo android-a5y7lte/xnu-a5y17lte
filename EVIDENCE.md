@@ -2745,3 +2745,20 @@ amended. Two separate causes had to be found; the m10c/m10d "frozen panel" came 
 - **State left on the phone:** BOOT = m9e (read back and verified), SYSTEM = the Nura rootfs with the CMA module set active
   (it matches m9e and m10*); leftover module copies `/usr/lib/modules/7.2.0-a5y17lte.{cma,m9d,bak-m9d}` (about 2.4 MB each,
   harmless). 0 failed services, Wi-Fi connected, no oops. No eMMC write is half done.
+
+## 51. Top-edge artifacts fixed: the damage copy ignored the rectangle position (2026-10-31, Jimmy watching)
+
+**Result: m10i (`out/a5y17lte-mainline-m10i-boot.img`, sha256 `056c1a57…fe9ee28`) has no artifacts and is as fast as m10h
+(Jimmy: "the artifacts are gone").** Kernel side on the phone: driver bound without warnings, 0 failed services, Wi-Fi up,
+CRTC enabled with a framebuffer.
+- **Root cause** (found by reading how simpledrm/sysfb does the same copy, not by the alpha hypothesis of EVIDENCE 50): my
+  `pipe_update` called `drm_fb_memcpy(&dst, NULL, src, fb, &rect)` with `dst` at the START of the scanout buffer for every
+  damage rectangle. The helper copies the clip region of the source to `dst` as given and does not offset `dst`, so every
+  partial update (spinner, clock, keypad digits, the lock screen's small changes) was drawn at the top-left corner of
+  the panel instead of in place: lines along the top edge that grew with every press on the keypad. Full-screen updates
+  (the first frame) were fine, which is why a clean screen could come back and why my flat grey test, written behind the
+  driver's back, did not explain it.
+- **Fix:** `iosys_map_incr(&dst, drm_fb_clip_offset(dst_pitch, dst_format, &rect))` per rectangle with an explicit
+  `dst_pitch` (width * 4), as sysfb does, plus `drm_fb_xrgb8888_to_argb8888()` for XRGB8888 framebuffers (alpha 0xff, like
+  simpledrm; the bootloader's framebuffer is ARGB8888) and `drm_fb_memcpy()` for ARGB8888 ones. v7.2 has no `drm_fb_blit`.
+- Lesson: `drm_fb_memcpy`/`drm_fb_xrgb8888_to_*` take a destination that already points at the clip's position.

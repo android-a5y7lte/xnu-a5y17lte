@@ -171,13 +171,15 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   `MCU_RST_N(SSP_RST)` on gpf4-2); mainline has no SSP/sensor-hub driver, so this is one hub driver
   (plus firmware loading questions) rather than one driver per sensor; ties into auto-rotate and
   proximity screen-off in Phosh.
-- DISPLAY DRIVER WORKS BUT HAS ARTIFACTS (EVIDENCE 47-50, 2026-10-30): m10h (patches 0010/0011, DECON=1 build) shows Phosh through
-  our DECON hand-off driver (shmem shadow planes, damage copy into S-Boot's framebuffer at 0x67000000; fast, phoc 25-73 % CPU)
-  but there are small artifacts along the TOP EDGE of the panel (never there with simpledrm). m9e (same config/DT, driver off) is
-  clean: the driver causes them. Suspect XRGB8888 copied raw instead of converted to ARGB8888 with alpha 0xff (EVIDENCE 50).
-  Findings: display DMA only reaches low RAM (< 0x80000000), a new IDMA base address needs IDMA +0x1c bit 0 (VG_PINGPONG_UPDATE),
-  `/dev/mem` maps managed RAM cacheable (bad for scanout tests), Phosh blanks the CRTC after idle and wakes on the power button
-  only. The phone is left on m9e (stable, simpledrm). m10 images need the CMA module set in the rootfs (already installed).
+- DISPLAY DRIVER WORKS (EVIDENCE 47-51, 2026-10-31): m10i (patches 0010/0011, `DECON=1 MILESTONE=... ./build-mainline.sh`) shows Phosh through
+  our DECON hand-off driver: shmem shadow planes, damage rectangles copied (ARGB8888, offset to the rectangle's position) into S-Boot's
+  framebuffer at 0x67000000; fast and clean (Jimmy confirmed). The earlier top-edge artifacts were a missing destination offset in
+  the damage copy. m9e = same config/DT with the driver off (simpledrm, also fine). Findings: the display DMA only reaches low RAM
+  (< 0x80000000), a new IDMA base address needs IDMA +0x1c bit 0 (VG_PINGPONG_UPDATE) (direct scanout works but is not used: userspace
+  rendering into write-combined buffers is far too slow), `/dev/mem` maps managed RAM cacheable (bad for scanout tests), Phosh blanks
+  the CRTC after idle and wakes on the power button only (touch does not wake it). m10 images need the CMA module set in the rootfs
+  (installed on SYSTEM; copies .cma/.m9d/.bak-m9d are left in /usr/lib/modules). Still no brightness, power or AOD control: that is
+  the DSIM + panel driver, next.
 - NEXT: (1) the display driver (was "backlight control") (screen brightness; no backlight device yet, "No backlight"
   in the phoc log); (2) then the real DECON/DSI display driver (roadmap, with the CMU clock
   driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,

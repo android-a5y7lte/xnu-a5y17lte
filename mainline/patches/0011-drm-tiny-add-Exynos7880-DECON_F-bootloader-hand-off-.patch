@@ -1,4 +1,4 @@
-From 43af6d9d6e6b4a5d70c9354054dde19d2ce1972e Mon Sep 17 00:00:00 2001
+From 24a5289cb796f4e248364ad924293d67d8bf41d3 Mon Sep 17 00:00:00 2001
 From: Jimmy <fakeandroit@gmail.com>
 Date: Fri, 30 Oct 2026 17:49:57 +0200
 Subject: [PATCH] drm/tiny: add Exynos7880 DECON_F bootloader hand-off driver
@@ -32,8 +32,8 @@ Assisted-by: Claude:claude-sonnet-5-5
 ---
  drivers/gpu/drm/tiny/Kconfig            |  18 +
  drivers/gpu/drm/tiny/Makefile           |   1 +
- drivers/gpu/drm/tiny/exynos7880-decon.c | 427 ++++++++++++++++++++++++
- 3 files changed, 446 insertions(+)
+ drivers/gpu/drm/tiny/exynos7880-decon.c | 440 ++++++++++++++++++++++++
+ 3 files changed, 459 insertions(+)
  create mode 100644 drivers/gpu/drm/tiny/exynos7880-decon.c
 
 diff --git a/drivers/gpu/drm/tiny/Kconfig b/drivers/gpu/drm/tiny/Kconfig
@@ -79,10 +79,10 @@ index 48d30bf61..e3cd2d5b7 100644
  obj-$(CONFIG_DRM_PIXPAPER)              += pixpaper.o
 diff --git a/drivers/gpu/drm/tiny/exynos7880-decon.c b/drivers/gpu/drm/tiny/exynos7880-decon.c
 new file mode 100644
-index 000000000..8175564fe
+index 000000000..e99695070
 --- /dev/null
 +++ b/drivers/gpu/drm/tiny/exynos7880-decon.c
-@@ -0,0 +1,427 @@
+@@ -0,0 +1,440 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Exynos7880 DECON_F display controller, bootloader hand-off
@@ -293,10 +293,23 @@ index 000000000..8175564fe
 +	int idx;
 +
 +	if (state->fb && drm_dev_enter(&decon->drm, &idx)) {
-+		iosys_map_set_vaddr_iomem(&dst, decon->screen);
++		const struct drm_format_info *dst_format = drm_format_info(DRM_FORMAT_ARGB8888);
++		unsigned int dst_pitch = decon->mode.hdisplay * dst_format->cpp[0];
++
 +		drm_atomic_helper_damage_iter_init(&iter, old_state, state);
-+		drm_atomic_for_each_plane_damage(&iter, &rect)
-+			drm_fb_memcpy(&dst, NULL, shadow_state->data, state->fb, &rect);
++		drm_atomic_for_each_plane_damage(&iter, &rect) {
++			iosys_map_set_vaddr_iomem(&dst, decon->screen);
++			iosys_map_incr(&dst, drm_fb_clip_offset(dst_pitch, dst_format, &rect));
++
++			/* the bootloader's framebuffer is ARGB8888 with the alpha at 0xff */
++			if (state->fb->format->format == DRM_FORMAT_XRGB8888)
++				drm_fb_xrgb8888_to_argb8888(&dst, &dst_pitch, shadow_state->data,
++							    state->fb, &rect,
++							    &shadow_state->fmtcnv_state);
++			else
++				drm_fb_memcpy(&dst, &dst_pitch, shadow_state->data, state->fb,
++					      &rect);
++		}
 +		drm_dev_exit(idx);
 +	}
 +
