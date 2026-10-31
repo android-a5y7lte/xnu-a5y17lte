@@ -1,0 +1,221 @@
+From ced170acc4a78d565f560eb73b3c1ae8d0317332 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 31 Oct 2026 23:33:48 +0200
+Subject: [PATCH 16/16] power: supply: add the Samsung S2MU004 charger status
+ driver
+
+Report whether a valid power input is present (the status register of
+the charger block holds the input status), as a USB power supply. The
+interrupt line is shared with the MUIC, which is still handled from user
+space, so the register is polled every two seconds and a change is
+reported to user space. The charging itself is not controlled.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ drivers/power/supply/Kconfig           |  12 ++
+ drivers/power/supply/Makefile          |   1 +
+ drivers/power/supply/s2mu004-charger.c | 157 +++++++++++++++++++++++++
+ 3 files changed, 170 insertions(+)
+ create mode 100644 drivers/power/supply/s2mu004-charger.c
+
+diff --git a/drivers/power/supply/Kconfig b/drivers/power/supply/Kconfig
+index 9affb8ebd..e0eacb49a 100644
+--- a/drivers/power/supply/Kconfig
++++ b/drivers/power/supply/Kconfig
+@@ -240,6 +240,18 @@ config BATTERY_S2MU005
+ 
+ 	  This driver, if built as a module, will be called s2mu005-fuel-gauge.
+ 
++config CHARGER_S2MU004
++	tristate "Samsung S2MU004 PMIC charger status driver"
++	depends on I2C
++	select REGMAP_I2C
++	help
++	  Say Y to enable support for the charger block of the Samsung
++	  S2MU004 PMIC, found in the Galaxy A5 (2017). The driver reports
++	  whether a valid power input is present; it does not control the
++	  charging.
++
++	  This driver, if built as a module, will be called s2mu004-charger.
++
+ config BATTERY_COLLIE
+ 	tristate "Sharp SL-5500 (collie) battery"
+ 	depends on SA1100_COLLIE && MCP_UCB1200
+diff --git a/drivers/power/supply/Makefile b/drivers/power/supply/Makefile
+index 31fe4a145..1bec65e05 100644
+--- a/drivers/power/supply/Makefile
++++ b/drivers/power/supply/Makefile
+@@ -41,6 +41,7 @@ obj-$(CONFIG_BATTERY_QCOM_BATTMGR)	+= qcom_battmgr.o
+ obj-$(CONFIG_BATTERY_OLPC)	+= olpc_battery.o
+ obj-$(CONFIG_BATTERY_SAMSUNG_SDI)	+= samsung-sdi-battery.o
+ obj-$(CONFIG_BATTERY_S2MU005)	+= s2mu005-battery.o
++obj-$(CONFIG_CHARGER_S2MU004)	+= s2mu004-charger.o
+ obj-$(CONFIG_BATTERY_COLLIE)	+= collie_battery.o
+ obj-$(CONFIG_BATTERY_INGENIC)	+= ingenic-battery.o
+ obj-$(CONFIG_BATTERY_INTEL_DC_TI) += intel_dc_ti_battery.o
+diff --git a/drivers/power/supply/s2mu004-charger.c b/drivers/power/supply/s2mu004-charger.c
+new file mode 100644
+index 000000000..8f00f36d0
+--- /dev/null
++++ b/drivers/power/supply/s2mu004-charger.c
+@@ -0,0 +1,157 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Battery charger status driver for the Samsung S2MU004 PMIC
++ *
++ * Reports whether a valid power input (the USB cable) is present. The PMIC
++ * interrupt line is shared with the MUIC, which is still driven from user
++ * space, so the status registers are polled.
++ */
++
++#include <linux/bitfield.h>
++#include <linux/devm-helpers.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/power_supply.h>
++#include <linux/property.h>
++#include <linux/regmap.h>
++#include <linux/workqueue.h>
++
++#define S2MU004_REG_CHGR_STATUS0	0x0a
++#define S2MU004_CHGR_CHGIN		GENMASK(7, 5)
++/* values of the input status field that mean a valid input voltage */
++#define S2MU004_CHGR_CHGIN_GOOD_A	3
++#define S2MU004_CHGR_CHGIN_GOOD_B	5
++
++#define S2MU004_CHGR_POLL_MS		2000
++
++struct s2mu004_chgr {
++	struct device *dev;
++	struct regmap *regmap;
++	struct power_supply *psy;
++	struct delayed_work poll_work;
++	int online;
++};
++
++static const struct regmap_config s2mu004_chgr_regmap_config = {
++	.reg_bits = 8,
++	.val_bits = 8,
++	.max_register = 0xff,
++};
++
++static int s2mu004_chgr_get_online(struct s2mu004_chgr *priv, int *value)
++{
++	unsigned int val, chgin;
++	int ret;
++
++	ret = regmap_read(priv->regmap, S2MU004_REG_CHGR_STATUS0, &val);
++	if (ret < 0)
++		return ret;
++
++	chgin = FIELD_GET(S2MU004_CHGR_CHGIN, val);
++	*value = chgin == S2MU004_CHGR_CHGIN_GOOD_A ||
++		 chgin == S2MU004_CHGR_CHGIN_GOOD_B;
++
++	return 0;
++}
++
++static const enum power_supply_property s2mu004_chgr_properties[] = {
++	POWER_SUPPLY_PROP_ONLINE,
++	POWER_SUPPLY_PROP_HEALTH,
++};
++
++static int s2mu004_chgr_get_property(struct power_supply *psy,
++				     enum power_supply_property psp,
++				     union power_supply_propval *val)
++{
++	struct s2mu004_chgr *priv = power_supply_get_drvdata(psy);
++
++	switch (psp) {
++	case POWER_SUPPLY_PROP_ONLINE:
++		return s2mu004_chgr_get_online(priv, &val->intval);
++	case POWER_SUPPLY_PROP_HEALTH:
++		/* faults are not decoded yet */
++		val->intval = POWER_SUPPLY_HEALTH_GOOD;
++		return 0;
++	default:
++		return -EINVAL;
++	}
++}
++
++static const struct power_supply_desc s2mu004_chgr_desc = {
++	.name = "s2mu004-charger",
++	.type = POWER_SUPPLY_TYPE_USB,
++	.properties = s2mu004_chgr_properties,
++	.num_properties = ARRAY_SIZE(s2mu004_chgr_properties),
++	.get_property = s2mu004_chgr_get_property,
++};
++
++static void s2mu004_chgr_poll(struct work_struct *work)
++{
++	struct s2mu004_chgr *priv = container_of(work, struct s2mu004_chgr,
++						 poll_work.work);
++	int online;
++
++	if (!s2mu004_chgr_get_online(priv, &online) && online != priv->online) {
++		priv->online = online;
++		power_supply_changed(priv->psy);
++	}
++
++	schedule_delayed_work(&priv->poll_work,
++			      msecs_to_jiffies(S2MU004_CHGR_POLL_MS));
++}
++
++static int s2mu004_chgr_i2c_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct power_supply_config psy_cfg = {};
++	struct s2mu004_chgr *priv;
++	int ret;
++
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	priv->dev = dev;
++	priv->regmap = devm_regmap_init_i2c(client, &s2mu004_chgr_regmap_config);
++	if (IS_ERR(priv->regmap))
++		return dev_err_probe(dev, PTR_ERR(priv->regmap),
++				     "failed to initialize regmap\n");
++
++	psy_cfg.drv_data = priv;
++	psy_cfg.fwnode = dev_fwnode(dev);
++	priv->psy = devm_power_supply_register(dev, &s2mu004_chgr_desc, &psy_cfg);
++	if (IS_ERR(priv->psy))
++		return dev_err_probe(dev, PTR_ERR(priv->psy),
++				     "failed to register the power supply\n");
++
++	ret = s2mu004_chgr_get_online(priv, &priv->online);
++	if (ret < 0)
++		return dev_err_probe(dev, ret, "the charger does not answer\n");
++
++	ret = devm_delayed_work_autocancel(dev, &priv->poll_work, s2mu004_chgr_poll);
++	if (ret)
++		return ret;
++	schedule_delayed_work(&priv->poll_work,
++			      msecs_to_jiffies(S2MU004_CHGR_POLL_MS));
++
++	return 0;
++}
++
++static const struct of_device_id s2mu004_chgr_of_match[] = {
++	{ .compatible = "samsung,s2mu004-charger" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, s2mu004_chgr_of_match);
++
++static struct i2c_driver s2mu004_chgr_i2c_driver = {
++	.probe = s2mu004_chgr_i2c_probe,
++	.driver = {
++		.name = "s2mu004-charger",
++		.of_match_table = s2mu004_chgr_of_match,
++	},
++};
++module_i2c_driver(s2mu004_chgr_i2c_driver);
++
++MODULE_DESCRIPTION("Samsung S2MU004 PMIC battery charger status driver");
++MODULE_AUTHOR("Jimmy <fakeandroit@gmail.com>");
++MODULE_LICENSE("GPL");
+-- 
+2.43.0
+

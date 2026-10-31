@@ -181,6 +181,11 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   bring-up prototype (python via /dev/mem, vendor order, gpd3-4 = panel reset) gets every command to drain and the DECON to send frames (SW trigger),
   but the panel stays black and never answers reads (error report 0x8004); no command ever had a visible effect. Untested: panel supplies LCD_3P0/LCD_1P8
   (S2MPU05 LDOs, numbers unknown), the PCD pad pinctrl, D-PHY reset / PMU PHY power. So real brightness/AOD/power-off are open; software dimming is the stand-in.
+- BATTERY WORKS (read-only) (EVIDENCE 57, 2026-10-31): m11b (patches 0012-0016): `s2mu004-fuel-gauge` (the mainline s2mu005-battery driver with an S2MU004 variant,
+  gauge on its own bit-banged bus i2c-4 = gpc4-0/1 at 0x3b, alert gpa0-3) and `s2mu004-charger` (new driver, USB line power online, polled) show up in UPower and Phosh
+  (icon, charging state, percentage, temperature, energy and time estimates from a `simple-battery` DT node: 3000 mAh, 4.35 V). The charger input limit stays at the USB
+  default 500 mA (slow charging, ~10 h from empty): raising it per cable type needs cable detection (the MUIC type registers read 0 after the boot-time manual MUIC
+  switch), still open and not safe to guess. Not verified: the unplug/replug transition. Battery was at ~1 % (3.5 V) when last seen: keep the phone charging.
 - NEXT: (1) the display driver (was "backlight control") (screen brightness; no backlight device yet, "No backlight"
   in the phoc log); (2) then the real DECON/DSI display driver (roadmap, with the CMU clock
   driver), GPU, battery, audio; Wi-Fi leftovers (MAC address, board data, throughput, host-wake,

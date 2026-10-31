@@ -118,6 +118,12 @@
 		i2c-gpio,delay-us = <5>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+
+		/* the charger block of the same chip (EVIDENCE 57); the MUIC switch stays in user space */
+		charger@3d {
+			compatible = "samsung,s2mu004-charger";
+			reg = <0x3d>;
+		};
 	};
 
 	/*
@@ -173,6 +179,40 @@
 			touchscreen-size-x = <1080>;
 			touchscreen-size-y = <1920>;
 		};
+	};
+
+	/*
+	 * Battery fuel gauge (EVIDENCE 57): [D] exynos7880-a5y17lte-common-battery.dtsi:
+	 * s2mu004-fuelgauge@3B on i2c@13830000 (pinctrl i2c4_bus: gpc4-0 SDA, gpc4-1 SCL), alert
+	 * interrupt gpa0-3 (falling edge in the vendor driver). Bit-banged like the other buses.
+	 * The charger part of the S2MU004 is at 0x3d on the MUIC bus.
+	 */
+	i2c_fg: i2c-gpio-fg {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpc4 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpc4 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		fuel-gauge@3b {
+			compatible = "samsung,s2mu004-fuel-gauge";
+			reg = <0x3b>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&fuel_irq>;
+			monitored-battery = <&battery>;
+		};
+	};
+
+	/* [D] common-battery.dtsi: capacity_full 3000 mAh, 4.35 V battery data; the minimum is [H] */
+	battery: battery {
+		compatible = "simple-battery";
+		device-chemistry = "lithium-ion";
+		charge-full-design-microamp-hours = <3000000>;
+		voltage-max-design-microvolt = <4350000>;
+		voltage-min-design-microvolt = <3400000>;
 	};
 
 	/* [D] exynos7880-a5y17lte_eur_open_05.dts tsp_avdd: gpd1-4, 3.3 V */
@@ -310,6 +350,14 @@
 		samsung,pins = "gpa0-5";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	/* [D] fuel_irq: gpa0-3, pull-up (vendor pud 2) */
+	fuel_irq: fuel-irq-pins {
+		samsung,pins = "gpa0-3";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
 		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
 	};
 

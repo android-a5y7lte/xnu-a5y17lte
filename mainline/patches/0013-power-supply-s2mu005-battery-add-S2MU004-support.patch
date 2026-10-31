@@ -1,0 +1,148 @@
+From 301b729fc8f513763eb8e7a36a0d30ea4e02d40e Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 31 Oct 2026 23:25:30 +0200
+Subject: [PATCH 13/16] power: supply: s2mu005-battery: add S2MU004 support
+
+The S2MU004 fuel gauge (Galaxy A5 2017) has the same registers as the
+S2MU005 one at the same offsets, with the same scaling for the voltage,
+the current and the state of charge. It also reports the temperature,
+through the monitor output selected with 0x10 (a signed value in units
+of 1/256 degree Celsius).
+
+Add a compatible and a power supply description for it, with a
+temperature property and the new read helper.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ drivers/power/supply/Kconfig           |  8 ++--
+ drivers/power/supply/s2mu005-battery.c | 53 +++++++++++++++++++++++++-
+ 2 files changed, 56 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/power/supply/Kconfig b/drivers/power/supply/Kconfig
+index f0ede1cec..9affb8ebd 100644
+--- a/drivers/power/supply/Kconfig
++++ b/drivers/power/supply/Kconfig
+@@ -230,13 +230,13 @@ config BATTERY_SAMSUNG_SDI
+ 	  These batteries are used in Samsung mobile phones.
+ 
+ config BATTERY_S2MU005
+-	tristate "Samsung S2MU005 PMIC fuel gauge driver"
++	tristate "Samsung S2MU005 and S2MU004 PMIC fuel gauge driver"
+ 	depends on I2C
+ 	select REGMAP_I2C
+ 	help
+-	  Say Y to enable support for the Samsung S2MU005 PMIC integrated
+-	  fuel gauge, which works indepenently of the PMIC battery charger
+-	  counterpart, and reports battery metrics.
++	  Say Y to enable support for the Samsung S2MU005 and S2MU004 PMIC
++	  integrated fuel gauge, which works indepenently of the PMIC battery
++	  charger counterpart, and reports battery metrics.
+ 
+ 	  This driver, if built as a module, will be called s2mu005-fuel-gauge.
+ 
+diff --git a/drivers/power/supply/s2mu005-battery.c b/drivers/power/supply/s2mu005-battery.c
+index 53de6605b..1352d7eab 100644
+--- a/drivers/power/supply/s2mu005-battery.c
++++ b/drivers/power/supply/s2mu005-battery.c
+@@ -1,6 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0
+ /*
+- * Battery Fuel Gauge Driver for Samsung S2MU005 PMIC.
++ * Battery Fuel Gauge Driver for Samsung S2MU005 PMIC (and the S2MU004).
+  *
+  * Copyright (C) 2015 Samsung Electronics
+  * Copyright (C) 2023 Yassine Oudjana <y.oudjana@protonmail.com>
+@@ -29,6 +29,7 @@
+ #define S2MU005_FG_REG_RBATZ1		0x18
+ #define S2MU005_FG_REG_IRQLVL		0x1a
+ #define S2MU005_FG_REG_START		0x1e
++#define S2MU005_FG_MONOUTSEL_TEMP		0x10	/* S2MU004 only */
+ 
+ #define S2MU005_FG_MONOUTSEL_AVGCURRENT		0x26
+ #define S2MU005_FG_MONOUTSEL_AVGVOLTAGE		0x27
+@@ -149,6 +150,33 @@ static int s2mu005_fg_get_current_avg(struct s2mu005_fg *priv, int *value)
+ 	return ret;
+ }
+ 
++static int s2mu005_fg_get_temp(struct s2mu005_fg *priv, int *value)
++{
++	struct regmap *regmap = priv->regmap;
++	u32 val;
++	int ret;
++
++	mutex_lock(&priv->monout_mutex);
++	ret = regmap_write(regmap, S2MU005_FG_REG_MONOUTSEL,
++			   S2MU005_FG_MONOUTSEL_TEMP);
++	if (ret < 0) {
++		dev_err(priv->dev, "failed to enable temperature monitoring (%d)\n", ret);
++		goto unlock;
++	}
++
++	ret = regmap_read(regmap, S2MU005_FG_REG_MONOUT, &val);
++	if (ret < 0) {
++		dev_err(priv->dev, "failed to read temperature register (%d)\n", ret);
++		goto unlock;
++	}
++
++	/* signed, in units of 1/256 degree Celsius; the property is in tenths */
++	*value = ((s16)val * 10) >> 8;
++unlock:
++	mutex_unlock(&priv->monout_mutex);
++	return ret;
++}
++
+ static int s2mu005_fg_get_capacity(struct s2mu005_fg *priv, int *value)
+ {
+ 	struct regmap *regmap = priv->regmap;
+@@ -208,6 +236,16 @@ static const enum power_supply_property s2mu005_fg_properties[] = {
+ 	POWER_SUPPLY_PROP_STATUS,
+ };
+ 
++static const enum power_supply_property s2mu004_fg_properties[] = {
++	POWER_SUPPLY_PROP_VOLTAGE_NOW,
++	POWER_SUPPLY_PROP_VOLTAGE_AVG,
++	POWER_SUPPLY_PROP_CURRENT_NOW,
++	POWER_SUPPLY_PROP_CURRENT_AVG,
++	POWER_SUPPLY_PROP_CAPACITY,
++	POWER_SUPPLY_PROP_STATUS,
++	POWER_SUPPLY_PROP_TEMP,
++};
++
+ static int s2mu005_fg_get_property(struct power_supply *psy,
+ 				   enum power_supply_property psp,
+ 				   union power_supply_propval *val)
+@@ -227,11 +265,21 @@ static int s2mu005_fg_get_property(struct power_supply *psy,
+ 		return s2mu005_fg_get_capacity(priv, &val->intval);
+ 	case POWER_SUPPLY_PROP_STATUS:
+ 		return s2mu005_fg_get_status(priv, &val->intval);
++	case POWER_SUPPLY_PROP_TEMP:
++		return s2mu005_fg_get_temp(priv, &val->intval);
+ 	default:
+ 		return -EINVAL;
+ 	}
+ }
+ 
++static const struct power_supply_desc s2mu004_fg_desc = {
++	.name = "s2mu004-fuel-gauge",
++	.type = POWER_SUPPLY_TYPE_BATTERY,
++	.properties = s2mu004_fg_properties,
++	.num_properties = ARRAY_SIZE(s2mu004_fg_properties),
++	.get_property = s2mu005_fg_get_property,
++};
++
+ static const struct power_supply_desc s2mu005_fg_desc = {
+ 	.name = "s2mu005-fuel-gauge",
+ 	.type = POWER_SUPPLY_TYPE_BATTERY,
+@@ -284,6 +332,9 @@ static int s2mu005_fg_i2c_probe(struct i2c_client *client)
+ 
+ static const struct of_device_id s2mu005_fg_of_match_table[] = {
+ 	{
++		.compatible = "samsung,s2mu004-fuel-gauge",
++		.data = &s2mu004_fg_desc,
++	}, {
+ 		.compatible = "samsung,s2mu005-fuel-gauge",
+ 		.data = &s2mu005_fg_desc,
+ 	},
+-- 
+2.43.0
+

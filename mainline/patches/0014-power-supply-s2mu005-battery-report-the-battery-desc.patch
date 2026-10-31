@@ -1,0 +1,131 @@
+From 9f34991f51b6771a4d0481bab0462694f69c4300 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 31 Oct 2026 23:33:13 +0200
+Subject: [PATCH 14/16] power: supply: s2mu005-battery: report the battery
+ description on the S2MU004
+
+Use the optional monitored-battery node to report the design capacity,
+the design voltages and the technology, and from the capacity register
+the charge now, so that user space can compute energy and time
+estimates. Only the S2MU004 variant lists these properties for now.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ drivers/power/supply/s2mu005-battery.c | 66 ++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/drivers/power/supply/s2mu005-battery.c b/drivers/power/supply/s2mu005-battery.c
+index 1352d7eab..04d008a78 100644
+--- a/drivers/power/supply/s2mu005-battery.c
++++ b/drivers/power/supply/s2mu005-battery.c
+@@ -38,6 +38,7 @@ struct s2mu005_fg {
+ 	struct device *dev;
+ 	struct regmap *regmap;
+ 	struct power_supply *psy;
++	struct power_supply_battery_info *info;
+ 	struct mutex monout_mutex;
+ };
+ 
+@@ -177,6 +178,22 @@ static int s2mu005_fg_get_temp(struct s2mu005_fg *priv, int *value)
+ 	return ret;
+ }
+ 
++static int s2mu005_fg_get_charge_now(struct s2mu005_fg *priv, int *value)
++{
++	u32 val;
++	int ret;
++
++	if (!priv->info || priv->info->charge_full_design_uah <= 0)
++		return -ENODATA;
++
++	ret = regmap_read(priv->regmap, S2MU005_FG_REG_RSOC, &val);
++	if (ret < 0)
++		return ret;
++
++	*value = ((u64)val * priv->info->charge_full_design_uah) >> 14;
++	return 0;
++}
++
+ static int s2mu005_fg_get_capacity(struct s2mu005_fg *priv, int *value)
+ {
+ 	struct regmap *regmap = priv->regmap;
+@@ -237,6 +254,13 @@ static const enum power_supply_property s2mu005_fg_properties[] = {
+ };
+ 
+ static const enum power_supply_property s2mu004_fg_properties[] = {
++	POWER_SUPPLY_PROP_PRESENT,
++	POWER_SUPPLY_PROP_TECHNOLOGY,
++	POWER_SUPPLY_PROP_CHARGE_NOW,
++	POWER_SUPPLY_PROP_CHARGE_FULL,
++	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
++	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
++	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
+ 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+ 	POWER_SUPPLY_PROP_VOLTAGE_AVG,
+ 	POWER_SUPPLY_PROP_CURRENT_NOW,
+@@ -267,6 +291,32 @@ static int s2mu005_fg_get_property(struct power_supply *psy,
+ 		return s2mu005_fg_get_status(priv, &val->intval);
+ 	case POWER_SUPPLY_PROP_TEMP:
+ 		return s2mu005_fg_get_temp(priv, &val->intval);
++	case POWER_SUPPLY_PROP_PRESENT:
++		val->intval = 1;
++		return 0;
++	case POWER_SUPPLY_PROP_TECHNOLOGY:
++		if (!priv->info || priv->info->technology < 0)
++			return -ENODATA;
++		val->intval = priv->info->technology;
++		return 0;
++	case POWER_SUPPLY_PROP_CHARGE_NOW:
++		return s2mu005_fg_get_charge_now(priv, &val->intval);
++	case POWER_SUPPLY_PROP_CHARGE_FULL:
++	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
++		if (!priv->info || priv->info->charge_full_design_uah <= 0)
++			return -ENODATA;
++		val->intval = priv->info->charge_full_design_uah;
++		return 0;
++	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
++		if (!priv->info || priv->info->voltage_max_design_uv <= 0)
++			return -ENODATA;
++		val->intval = priv->info->voltage_max_design_uv;
++		return 0;
++	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
++		if (!priv->info || priv->info->voltage_min_design_uv <= 0)
++			return -ENODATA;
++		val->intval = priv->info->voltage_min_design_uv;
++		return 0;
+ 	default:
+ 		return -EINVAL;
+ 	}
+@@ -288,6 +338,13 @@ static const struct power_supply_desc s2mu005_fg_desc = {
+ 	.get_property = s2mu005_fg_get_property,
+ };
+ 
++static void s2mu005_fg_put_battery_info(void *data)
++{
++	struct s2mu005_fg *priv = data;
++
++	power_supply_put_battery_info(priv->psy, priv->info);
++}
++
+ static int s2mu005_fg_i2c_probe(struct i2c_client *client)
+ {
+ 	struct device *dev = &client->dev;
+@@ -321,6 +378,15 @@ static int s2mu005_fg_i2c_probe(struct i2c_client *client)
+ 		return dev_err_probe(dev, PTR_ERR(priv->psy),
+ 				     "failed to register power supply subsystem\n");
+ 
++	/* optional: the battery description (design capacity and voltages) */
++	if (!power_supply_get_battery_info(priv->psy, &priv->info)) {
++		ret = devm_add_action_or_reset(dev, s2mu005_fg_put_battery_info, priv);
++		if (ret)
++			return ret;
++	} else {
++		priv->info = NULL;
++	}
++
+ 	ret = devm_request_threaded_irq(priv->dev, client->irq, NULL,
+ 					s2mu005_handle_irq, IRQF_ONESHOT,
+ 					psy_desc->name, priv);
+-- 
+2.43.0
+

@@ -2891,3 +2891,39 @@ the whole screen smoothly and cleanly (Jimmy: "I see the brightness slider and i
   2 = by pixel alpha, 4 = multiplied.
 - Not done: the brightness is not saved over a reboot (255 at boot); no ambient-light auto brightness (no sensors yet); real panel brightness/AOD
   still wait for the panel command path (EVIDENCE 55).
+
+## 57. Battery: fuel gauge and charger status work (2026-10-31, Jimmy watching)
+
+**Result: m11b (`out/a5y17lte-mainline-m11b-boot.img`, sha256 `d852e339…8078`) gives the phone a working battery in Phosh/UPower:
+`s2mu004-fuel-gauge` (Battery) and `s2mu004-charger` (USB line power, online while the cable is in).** Jimmy: "the battery icon shows and
+charging". The kernel side was checked over SSH (values below); m11a (`1404669c…0ab6`) was the gauge-only step.
+- **Chip layout (vendor sources read read-only with Jimmy's OK: `drivers/battery_v2/s2mu004_{charger,fuelgauge}.c` + headers,
+  `include/linux/mfd/samsung/s2mu004-private.h`, `board dtsi exynos7880-a5y17lte-common-battery.dtsi`):**
+  - Charger/MUIC/flash chip at 0x3d on the MUIC bus (i2c-0): register enum SC_INT1 0x00, SC_INT2 0x01, INT masks 0x02/0x03, SC_STATUS0..5 0x0a..0x0f,
+    SC_CTRL0.. 0x10... (matches the live dump). STATUS0 bits 7:5 = input status (3 or 5 = valid input; live 0xa3), STATUS1 bit 7 = discharging, bits 1:0 =
+    done/top-off, STATUS3 bit 0 = battery detected. CTRL2 (0x12) = input current limit (value x 25 + 50 mA), CTRL9 (0x19) = fast charge current
+    ((value + 1) x 25 mA). Live: CTRL2 = 0x12 (500 mA, the USB default), CTRL9 = 0x11 (450 mA).
+  - **The fuel gauge is NOT on the MUIC bus:** vendor `i2c@13830000` (I2C channel 4, pins gpc4-0 SDA / gpc4-1 SCL, here bit-banged as `i2c-gpio-fg` =
+    i2c-4), `s2mu004-fuelgauge@3B`, alert interrupt gpa0-3 (falling edge in the vendor driver, pull-up). Its registers are the S2MU005 gauge's
+    (RVBAT 0x04, RCUR_CC 0x06, RSOC 0x08, MONOUT 0x0a, MONOUT_SEL 0x0c, ...), with the same scaling: mV = RVBAT * 1000 >> 13, current from RCUR_CC two's complement * 1000 >> 12
+    (raw negative = charging), SOC = RSOC * 100 >> 14 percent, temperature = MONOUT (after MONOUT_SEL = 0x10) in 1/256 degree. S-Boot has already loaded the
+    vendor's SDI battery model (the 4.35 V tables of the vendor DT are readable at 0x90..0xff and 0x0e..0x11), so no model loading is needed.
+  - `usbpd-s2mu004@3C` (sec-usbpd) is listed on the gauge's bus in the vendor DT (not probed; EVIDENCE 44's "no PD chip" should be rechecked).
+- **Kernel patches (mainline/patches 0012-0016, each with Assisted-by, no AI Signed-off-by):** 0012/0013 add the `samsung,s2mu004-fuel-gauge`
+  binding value and an S2MU004 variant to the mainline `s2mu005-battery` driver (temperature property); 0014 reports the battery description
+  (monitored-battery: design capacity, design voltages, technology, charge-now computed from RSOC); 0015/0016 are a new binding and driver
+  `s2mu004-charger` (USB power supply, online from STATUS0, polled every 2 s because the chip's interrupt line is shared with the user-space
+  MUIC handling; read-only, it does not control the charging). `a5-diag muic` is unaffected (it uses I2C_RDWR, which does not claim the address).
+  DT: `i2c_fg` bus + `fuel-gauge@3b` (gpa0-3 falling edge, `fuel_irq` pins) + `charger@3d` under the MUIC bus + a `simple-battery`
+  node (3000 mAh, 4.35 V max, 3.4 V min, Li-ion) in `mainline/dts/exynos7880-a5y17lte.dts`; config `CONFIG_POWER_SUPPLY`, `CONFIG_BATTERY_S2MU005`, `CONFIG_CHARGER_S2MU004`.
+- **Live values (m11b, USB plugged, battery nearly empty):** gauge 3.53 V, capacity 1 % (RSOC 0x0064 is 0.6 %: the battery really is at the bottom, 3.48 V is below
+  the vendor's empty point), current +175 mA charging, 31.1 deg C, charge_now 33 mAh of 3000; charger online=1, health Good. UPower: state charging, energy-full 13.05 Wh,
+  "time to full 10.5 hours", icon battery-caution-charging-symbolic, plus a line_power_s2mu004_charger device.
+- **Why charging is slow:** the charger input limit is the USB default 500 mA (2.5 W, minus what the running phone uses). The vendor raises it per cable type (its table:
+  USB 500/800 mA input/fast, dedicated charger 900/1200, mains adapter 1800/2100, CDP 1500/1500, max input 3 A) from the MUIC's device-type registers, but after the
+  boot-time manual MUIC switch those registers read 0 (DEV_TYPE1 0x62, TYPE2 0x63, CHG_TYPE 0x68, TYPE3 0x64 = 1), so the cable type is unknown and raising the limit blindly could overload a PC port.
+  Open: find out what the MUIC/charger report with a wall adapter (test with one plugged in, reading over Wi-Fi), possibly use the AICL feature, then set CTRL2/CTRL9 per type (and handle the charger watchdog and top-off like the vendor).
+- **Not verified:** the unplug/replug transition (a recording over Wi-Fi was started at the end of the session but produced no output; the cable was unplugged and replugged by Jimmy). Next session:
+  repeat it (`online` should go 1 -> 0 -> 1, battery status Discharging while unplugged, UPower line-power device following).
+- Other open points: gauge alert interrupt (the driver does not configure the thresholds, the IRQ is requested but not used), ambient charge-control, battery low shutdown policy
+  (UPower acts on a discharging battery at its critical percentage; at about 1 % it will power the phone off when unplugged), the S2MU004 flash LED and the MUIC itself as proper drivers.
