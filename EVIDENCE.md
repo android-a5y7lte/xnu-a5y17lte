@@ -2842,3 +2842,30 @@ Prototype = python on the phone through /dev/mem (DSIM 0x14800000, DECON 0x14830
   file `decon_reg_7880.c`) after the DSIM. The 2 s "picture back" Jimmy saw in the middle of the experiments was without TE and did not last.
 - Scratch scripts only (not in the repo). Pitfalls: `gpioset -p` does not exit after the period, a second `gpioset` on a held line fails silently,
   the reset pad must be held high by a process once it was driven, and `/tmp` on the phone is cleared by every reboot.
+
+## 55. DECON re-init added to the bring-up prototype: frames work, the panel stays black (2026-10-31, Jimmy watching)
+
+Same method as EVIDENCE 54 (python via /dev/mem, `gpioset` for the reset, reboot to recover). Sequence tested end to end:
+DECON stop (mask trigger, direct off, shadow update, run off, SRESET) -> DSIM stop + sw reset -> PLL/D-PHY/lanes/clocks/config
+(vendor `dsim_enable` order, values from the S-Boot snapshot) -> panel reset pulse -> DSIM start (HS clock, standby) -> panel start-up
+commands -> DECON init (registers restored from the S-Boot snapshot with the trigger masked) -> DECON start (direct on, global shadow update,
+wait run, unmask trigger).
+- **Everything the host controls works:** DECON stops and resets cleanly; the DSIM PLL locks and the lanes reach stop state; every
+  start-up command (sleep out, test keys, the vendor common settings CE/CC/ED/FD/12/30, gamma CA, AID B2, TSET B8, ELVSS B6, gamma update F7,
+  ACL B5/55, TE on, display on, normal mode; all as 0x05 or 0x39 packets) drains from the header FIFO with no stall; the restored DECON
+  registers equal S-Boot's (only status/counter registers differ); the DECON reports run (GLOBAL 0x133, the idle flag set while it waits).
+- **Frames:** after the re-init the DECON sends **no frame on its own** (FRAME_ID stays at 0, no HS activity on the D-PHY): the HW trigger path
+  (panel TE -> DSIM -> DECON) is dead, which means the panel is not producing TE. A **software trigger works**: put the DECON in SW trigger
+  mode (`+0x70` = 0, HW_TRIG_EN off) and write `+0x70` bit 8; each pulse advances FRAME_ID by one, drives the D-PHY into HS bursts and raises
+  FRAME_DONE (INT pending 0x01001000). SW triggers while HW_TRIG_EN is set are ignored.
+- **Panel:** stays black in every variant (commands in HS or LP, EoT packet enabled or disabled via `DSIM_CONFIG` bit 28 which mainline sets for S6E3
+  panels, TE on as a long write). No command ever had a visible effect on this panel from Linux, not even display off (`0x28`) on S-Boot's own state,
+  and every read request is answered with the DSI error report `13800402` (EoT sync error + protocol violation). The panel therefore seems to
+  discard the host's command packets; sending as long writes, in LP, or without EoT did not change that. The lanes' status register cannot show the short
+  command bursts, so "packets on the wire" is unverified.
+- **Unverified ideas for the next session:** (1) the panel's own supplies (LCD_3P0 / LCD_1P8 on the S2MPU05, LDO numbers unknown) and the PCD pad
+  pinctrl (`disp_pcd`) are never touched by the prototype; the vendor switches both; (2) the D-PHY reset bit (`SWRST` bit 8, vendor
+  `dsim_reg_dphy_reset`) and the MIPI PHY power/isolation (PMU) are not toggled; (3) a different gamma/ELVSS than the fixed template (no MTP read is
+  possible while reads fail); (4) a logic analyser/scope is not available, so DSI traffic cannot be observed. A full mainline takeover
+  (`samsung-dsim` + panel driver + DECON driver) would face the same unknown.
+- Nothing from the prototype is in the repo (scratch scripts); the phone is back on S-Boot's display state (m10i, rebooted).
