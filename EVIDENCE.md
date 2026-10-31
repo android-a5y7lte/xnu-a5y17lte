@@ -2762,3 +2762,31 @@ CRTC enabled with a framebuffer.
   `dst_pitch` (width * 4), as sysfb does, plus `drm_fb_xrgb8888_to_argb8888()` for XRGB8888 framebuffers (alpha 0xff, like
   simpledrm; the bootloader's framebuffer is ARGB8888) and `drm_fb_memcpy()` for ARGB8888 ones. v7.2 has no `drm_fb_blit`.
 - Lesson: `drm_fb_memcpy`/`drm_fb_xrgb8888_to_*` take a destination that already points at the clip's position.
+
+## 52. DSIM command path on the live S-Boot link: the host sends, the panel answers with errors (2026-10-31)
+
+Goal: send DCS commands (brightness, display on/off) through S-Boot's running DSIM (0x14800000) without re-initialising
+it. Jimmy allowed reading the vendor DSIM files read-only (`dsim_reg_7880.c`, `regs-dsim.h`, `dsim_drv.c`, nothing copied).
+Tools: python on the phone writing the DSIM registers through /dev/mem (header at +0x3c, payload at +0x40, RX FIFO at +0x44).
+- **Live state:** command mode (CONFIG 0xa480707f: 4 lanes, burst, non-continuous clock, no video bit), `CMD_ALLOW` already 0xf
+  (MVPORCH 0xf002000f), CMD_CONFIG (+0x78) = 0, ESCMODE 0x01400000 (commands in HS), FIFOCTRL 0x1547. The D-PHY status
+  alternates between "data lanes in stop state" (0x10f/0x40f) and "transmitting HS" (0x7fc00): the link is busy with the
+  60 Hz frame transfers a good part of the time.
+- **Vendor register facts (differ from mainline's `samsung-dsim` names):** FIFOCTRL bit 12 = RX empty, bit 11/10 = SFR header
+  full/empty, bit 9 = payload full, init bits 2 (RX) and 1 (SFR) (clear then set); INTSRC bit 28 = header FIFO empty, bit 18 = RX
+  done, bit 25 = BTA done; packet header = id | data0 << 8 | data1 << 16 (ECC by hardware), same as mainline; the vendor
+  sends the header then waits for the header-FIFO-empty interrupt; a read = init RX FIFO, clear RX_DONE, set-max-return-size
+  (0x37), DCS read (0x06), wait RX_DONE, pop words until RX empty; the vendor panel code reads the ID with a plain DCS read
+  (retry twice). `CMD_CONFIG` has PKT_GO bits (21/22) but nothing special is needed for plain commands (vendor option).
+- **What happens:** the packets are accepted and the header FIFO empties (INTSRC bit 28), but every read request is answered
+  with `0x13800402` = DSI "acknowledge and error report", error bits 0x8004 (bit 2 EoT sync error + bit 15 DSI protocol
+  violation), nothing else in the RX FIFO. The same in all four combinations of HS/LP command mode and HW trigger running/masked,
+  with a properly drained RX FIFO. DCS display off/on (0x28/0x29, short writes, HS and LP) never blanked the screen, so the
+  panel does not execute what the host sends. The one exception: the very first read (`0x04`, after a BTA force) returned a
+  real long-read response (header 0x1c, 3 bytes: 46 00 12); it never repeated, cause unknown.
+- **Reading:** the S-Boot link state is good enough for frames (HS, TE trigger) but commands from Linux are not understood by the panel
+  there (EoT/framing as the panel sees it). A clean re-initialisation of the DSIM + PHY + panel (mainline `samsung-dsim` + a
+  panel driver with the vendor init sequence) would give a known state; it is the larger, riskier step (the screen goes
+  black until it is right). Not started.
+- Test scripts were scratch files (not in the repo); the phone was left as it was (ESCMODE and the DECON trigger restored after
+  each test, display unchanged, m10i still booted).
