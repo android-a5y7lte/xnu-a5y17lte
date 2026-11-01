@@ -2927,3 +2927,22 @@ charging". The kernel side was checked over SSH (values below); m11a (`1404669câ
   repeat it (`online` should go 1 -> 0 -> 1, battery status Discharging while unplugged, UPower line-power device following).
 - Other open points: gauge alert interrupt (the driver does not configure the thresholds, the IRQ is requested but not used), ambient charge-control, battery low shutdown policy
   (UPower acts on a discharging battery at its critical percentage; at about 1 % it will power the phone off when unplugged), the S2MU004 flash LED and the MUIC itself as proper drivers.
+
+## 58. Charger probe: unplug transition verified; cable type is invisible after the manual MUIC switch (2026-11-01)
+
+Tool: `tools/charge-probe.sh` (read-only logger: charger and MUIC registers, input/charge limits, battery; run detached on the phone, log in RAM).
+The battery was dead overnight (about 1 % and 3.5 V at the end of 2026-10-31; the phone powered off by itself), charged and booted again at 3.30 V,
+then died again once more on USB and had to be charged powered off; at 3.4 V and 0 % every short loss of input power browns the phone out.
+- **Unplug/replug works end to end** (from the 2 s polling of the log): `online` 1 -> 0 -> 1, battery status Charging -> Discharging (about -370 mA) ->
+  Charging, `STATUS0` 0xa3 (PC USB, input status 5) -> 0x03 (no input) -> 0x63 (input status 3, valid; the cable after the swap).
+- **Cable type is not observable at runtime:** with the PC port and after the swap the MUIC's `DEVICE_TYPE1` (0x62), `DEVICE_TYPE2`, `CHG_TYPE` (0x68) and `ADC`
+  all read 0x00 (`TYPE3` 0x01, `DEVICE_APPLE` 0x06 with a charger/PC attached, 0x04 unplugged); the input current limit (`CTRL2` 0x12 = 500 mA) and the fast-charge
+  setting (`CTRL9` 0x11 = 450 mA) never changed. Cause: `a5-diag muic` clears `CTRL1` bit 2 (manual switching) and forces D+/D- to USB so that the PC link works; in manual mode the
+  MUIC does not refresh the detection registers. The `STATUS0` input field (5 on the PC port, 3 later) is not a reliable cable indicator (it may also depend on the VBUS level and the charge state).
+- **The charging speed is limited to 500 mA input** (a wall charger gives the same ~230-270 mA to a battery at 3.4 V while the phone runs); the vendor driver sets 900-3000 mA by cable type
+  (dedicated charger = `DEVICE_TYPE1` 0x40/0x44/0x60, CDP 0x20, USB 0x04, valid VBUS in `DEVICE_APPLE`).
+- **Idea, not built:** at boot `a5-diag muic` reads these registers before the manual switch, i.e. S-Boot's detection of the cable that was attached at power-on. Log them to the kernel
+  log (or /run) there, check them once with the PC cable and once with a wall charger attached at power-on, and if they distinguish the types, let a service raise the charger input limit
+  accordingly (the charger driver would need a writable `input_current_limit` that falls back to 500 mA when the cable goes away). Hot-plugged wall chargers would stay at the safe default.
+  Alternative: the USB gadget state (`/sys/class/udc/*/state`: configured = a host is there, no enumeration after a few seconds = plain charger), which needs VBUS handling that mainline dwc3 does not have here.
+- The test must be done with a battery that has some charge (suggest above 30 %), charged with the phone powered off.
