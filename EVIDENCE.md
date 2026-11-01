@@ -2946,3 +2946,7 @@ then died again once more on USB and had to be charged powered off; at 3.4 V and
   accordingly (the charger driver would need a writable `input_current_limit` that falls back to 500 mA when the cable goes away). Hot-plugged wall chargers would stay at the safe default.
   Alternative: the USB gadget state (`/sys/class/udc/*/state`: configured = a host is there, no enumeration after a few seconds = plain charger), which needs VBUS handling that mainline dwc3 does not have here.
 - The test must be done with a battery that has some charge (suggest above 30 %), charged with the phone powered off.
+- **Brownout aftermath (Jimmy, 2026-11-01):** after the crash during the cable swap at about 3.4 V the phone would not power on: it hung at the Samsung logo, needed two
+  download-mode cooldowns and a TWRP -> Reboot -> System to recover; then it was left powered off on the wall adapter. Lesson: with the battery below about 3.5 V never interrupt the
+  input power on purpose (no live cable swaps, no flashing without a charger attached), and charge it powered off before any test that touches the cable. A phone that dies at the logo is
+  a battery-level problem, not a boot-image problem, so do not suspect the image first.
