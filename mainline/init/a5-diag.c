@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -294,6 +295,8 @@ static int cmd_usb(void)
 #define MUIC_DEVICE_TYPE2	0x63
 #define MUIC_DEVICE_TYPE3	0x64
 #define MUIC_CHG_TYPE		0x68
+#define MUIC_DEVICE_APPLE	0x69
+#define SC_STATUS0		0x0a	/* charger: input status in bits 7:5 */
 #define MUIC_REV_ID		0x82
 #define MUIC_CTRL1		0xc7
 #define MUIC_SW_CTRL		0xca
@@ -359,6 +362,24 @@ static const char *sw_path(int v)
 	}
 }
 
+/* One line into the kernel log (dmesg keeps it after boot); init has no other log file */
+static void klog(const char *fmt, ...)
+{
+	char buf[200];
+	va_list ap;
+	int n, fd = open("/dev/kmsg", O_WRONLY);
+
+	if (fd < 0)
+		return;
+	n = snprintf(buf, sizeof(buf), "<6>a5-diag: ");
+	va_start(ap, fmt);
+	vsnprintf(buf + n, sizeof(buf) - n, fmt, ap);
+	va_end(ap);
+	if (write(fd, buf, strlen(buf)) < 0)
+		perror("kmsg");
+	close(fd);
+}
+
 static int cmd_muic(void)
 {
 	int ctrl, sw, rev;
@@ -374,10 +395,22 @@ static int cmd_muic(void)
 		printf(" muic   : I2C read FAILED (rev %d ctrl %d sw %d)\n", rev, ctrl, sw);
 		return 1;
 	}
-	printf(" muic   : rev %02x adc %02x dev %02x %02x %02x chg %02x\n", rev,
-	       muic_rd(MUIC_ADC), muic_rd(MUIC_DEVICE_TYPE1),
-	       muic_rd(MUIC_DEVICE_TYPE2), muic_rd(MUIC_DEVICE_TYPE3),
-	       muic_rd(MUIC_CHG_TYPE));
+	{
+		/*
+		 * S-Boot's cable detection is still in these registers until the switch below
+		 * (in manual mode the MUIC stops updating them): log it for the charging
+		 * current (EVIDENCE 58). dev1: 0x04 USB, 0x20 CDP, 0x40/0x44/0x60 dedicated charger.
+		 */
+		int adc = muic_rd(MUIC_ADC), d1 = muic_rd(MUIC_DEVICE_TYPE1);
+		int d2 = muic_rd(MUIC_DEVICE_TYPE2), d3 = muic_rd(MUIC_DEVICE_TYPE3);
+		int chg = muic_rd(MUIC_CHG_TYPE), apple = muic_rd(MUIC_DEVICE_APPLE);
+		int st0 = muic_rd(SC_STATUS0);
+
+		printf(" muic   : rev %02x adc %02x dev %02x %02x %02x chg %02x\n", rev,
+		       adc, d1, d2, d3, chg);
+		klog("muic before the switch: rev %02x adc %02x dev1 %02x dev2 %02x dev3 %02x chg %02x apple %02x st0 %02x ctrl1 %02x sw %02x\n",
+		     rev, adc, d1, d2, d3, chg, apple, st0, ctrl, sw);
+	}
 	printf(" muic   : CTRL1 %02x (%s switching)  SW_CTRL %02x (D+/D- = %s)\n",
 	       ctrl, (ctrl & CTRL1_MANUAL_SW) ? "auto" : "manual", sw, sw_path(sw));
 

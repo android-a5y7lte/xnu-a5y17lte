@@ -2950,3 +2950,14 @@ then died again once more on USB and had to be charged powered off; at 3.4 V and
   download-mode cooldowns and a TWRP -> Reboot -> System to recover; then it was left powered off on the wall adapter. Lesson: with the battery below about 3.5 V never interrupt the
   input power on purpose (no live cable swaps, no flashing without a charger attached), and charge it powered off before any test that touches the cable. A phone that dies at the logo is
   a battery-level problem, not a boot-image problem, so do not suspect the image first.
+
+## 59. Boot-time MUIC logging prepared, NOT yet tested (2026-11-01)
+
+Built only, nothing flashed or booted (the battery is being charged powered off, EVIDENCE 58).
+- `mainline/init/a5-diag.c`, `cmd_muic()`: before the manual switch it now reads the MUIC (ADC 0x61, DEVICE_TYPE1..3 0x62..0x64, CHG_TYPE 0x68, DEVICE_APPLE 0x69) and the charger
+  `SC_STATUS0` (0x0a), together with CTRL1 and SW_CTRL, and writes one line to the kernel log through `/dev/kmsg`:
+  `a5-diag: muic before the switch: rev .. adc .. dev1 .. dev2 .. dev3 .. chg .. apple .. st0 .. ctrl1 .. sw ..`. The switching logic and the console output are unchanged.
+  Compiles with the build's `-Wall -Werror`. Image `out/a5y17lte-mainline-m11c-boot.img`, sha256 `a1376eb4…923f5e`, same kernel/config/DT as m11b (the installed module set matches).
+- **Test plan** (battery above about 30 %, charged powered off first): flash m11c from TWRP; boot 1 with the phone on the PC's USB port, read `dmesg | grep 'a5-diag: muic'`;
+  boot 2 with the wall charger plugged in at power-on and no PC (SSH over Wi-Fi), read the same line. If `dev1` differs (0x04 USB versus 0x40/0x44/0x60 charger, or the apple/chg bytes), a service can
+  raise the charger input limit for the charger case; otherwise the cable cannot be told apart at boot either and the limit stays at 500 mA.
