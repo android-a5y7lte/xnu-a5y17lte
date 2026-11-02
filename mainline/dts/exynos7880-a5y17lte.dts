@@ -450,6 +450,8 @@
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <4000>;
 		enable-active-high;
+		/* the Bluetooth side of the combo chip has no supply property in hci_qca: power it from boot (EVIDENCE 64/65) */
+		regulator-boot-on;
 		gpio = <&gpd3 3 GPIO_ACTIVE_HIGH>;
 	};
 

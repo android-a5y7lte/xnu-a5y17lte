@@ -3027,3 +3027,11 @@ m12a flashed to BOOT from TWRP (sha256 `99c1d588…865974`, read-back verified),
 - **Radio test:** `apk add bluez` (also with Jimmy's OK), `rc-service bluetooth start`, `bluetoothctl power on` and `scan on` for 15 s found 10 nearby devices (own test device included), so TX/RX and the antenna path work.
   The controller address is the placeholder `00:00:00:00:5A:AD` (the chip has no BD address programmed; a real one needs the NVM tag or `btmgmt public-addr`/`bdaddr` quirk, to be decided).
 - **Still open:** pairing/audio test with a real device; the power-timing fix; `CONFIG_RFKILL` (no `/dev/rfkill`, so Phosh's Bluetooth switch cannot work); `rc-update add bluetooth` and the service ordering; BT_WAKE/BT_HOST_WAKE (low power); a stable BD address; package the firmware and bluez in `build-pmos.sh`.
+
+## 65. m12b built: rfkill and early Bluetooth supply (2026-11-02), NOT flashed, untested
+
+- Changes on top of m12a: `CONFIG_RFKILL=y` (gives `/dev/rfkill`, needed for Phosh's Bluetooth switch) and `regulator-boot-on` on `cnss_dcdc_en` (gpd3-3, the combo chip's supply), so the supply is on before `hci_qca`
+  makes its first setup attempt (the unwired Wi-Fi-side probe used to switch it on ~8 s into boot; EVIDENCE 64). `regulator_ignore_unused` keeps it on. The Wi-Fi card's power sequencing (WLAN_EN, gpd3-6) is unchanged.
+- Image `out/a5y17lte-mainline-m12b-boot.img`, 16027664 B, sha256 `10b9303b…990e4b`. Module set: only `net/wireless/cfg80211.ko` differs from the installed one (new sha `62f40ac2…187b23`; the other 10 are
+  bit-identical), because cfg80211 grows rfkill support. mac80211/ath10k are unchanged, so the exported symbol versions should not have moved; to be safe the new cfg80211.ko is copied to the phone's
+  `/usr/lib/modules/7.2.0-a5y17lte/kernel/net/wireless/` (a SYSTEM write, needs Jimmy's OK) before or right after flashing; the installed old one should still load, without the rfkill hook (to check).
