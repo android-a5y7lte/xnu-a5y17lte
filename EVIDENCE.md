@@ -2987,3 +2987,19 @@ One 420 s run of `tools/udc-probe.sh` with hot-plugs (battery 100 %), plus a fin
 - **Conclusion:** the gadget state cannot be used to raise the input limit automatically: a failed enumeration on a PC port (500 mA maximum) would be taken for a charger. Not built. The MUIC registers do not help either
   (EVIDENCE 60). Options left: an explicit user opt-in (writable `input_current_limit` in the charger driver plus a toggle, wall chargers only), or fixing the hot-plug enumeration and the MUIC auto-detection
   (the boot-time manual switch to USB disables the hardware cable detection). Until then the input limit stays at the safe 500 mA.
+
+## 62. Bluetooth: which UART, and what is missing (2026-11-02, investigation only, no code, nothing flashed)
+
+Read from the project's vendor reference (`upstream/k7880`, as in EVIDENCE 35) and our tree.
+- Vendor `bluetooth { compatible = "qca,qca6174"; BT_EN gpd4-2, BT_WAKE gpd5-1, BT_HOST_WAKE gpa1-6; vdd-wlan-supply = cnss_dcdc_en; pinctrl bt_hostwake/bt_btwake/bt_en }` names no UART. The vendor
+  `exynos7880.dtsi` has two: `serial_0` at 0x13810000 (pins `uart0_bus` = gpb0-0..3, four wires, i.e. with RTS/CTS flow control) and `serial_2` at 0x13820000 (`uart2_bus` = gpa1-0/1, two wires, the debug console;
+  U-Boot uses it, EVIDENCE 2). `uart1_bus` (gpd2-0..3) is a third set but gpd2-3 is the vibrator pin on this board. Both nodes are enabled in the A5's common dtsi; serial_0 is the only one with flow-control
+  pins, so **the Bluetooth HCI UART is almost certainly 0x13810000 on gpb0-0..3** (to confirm by probing: a HCI reset at 115200 8N1, then 3 Mbaud after the firmware download).
+- Our tree: `mainline/dts/exynos7880.dtsi` has no UART nodes and only CMU_FSYS (plus fixed clocks for the MMC cards), so a UART node needs a clock. The 7870 CMU driver already has CMU_PERI (cmu_peri at 0x101f0000
+  with UART0..2 gates, `CLK_GOUT_PERI_UART0_PCLK/EXT_UCLK`, mainline `exynos7870.dtsi` serial0 at 0x13800000, serial1 at **0x13810000**, serial2); the vendor 7880 numbering "serial_0" is mainline's `serial1`.
+  Open: whether the 7880 PERI clock layout matches the 7870 one (the FSYS CMU did, with the `exynos7880-cmu-fsys` compatible falling back to 7870), the UART input clock rate, and whether S-Boot left the UART0/1 gates open.
+- Mainline `hci_qca` handles `qcom,qca6174-bt` (QCA_ROME) over a serdev UART. Firmware names for Rome 3.2/TF 1.1 (`rampatch_tlv_tf_1.1.tlv`, `nvm_tlv_tf_1.1.bin`, from the SYSTEM backup) must be checked
+  against what the driver requests (`qca/rampatch_*`, `qca/nvm_*`); the QCA9377's BT ID may need a quirk.
+- Plan (each step reversible, no eMMC write until a rootfs change is wanted): (1) add a `cmu_peri` node and the UART1 (0x13810000) node with `uart0_bus` pins, serdev child `bluetooth` with
+  shutdown-gpios gpd4-2, device-wakeup gpd5-1, host-wakeup gpa1-6, vddio from `cnss_dcdc_en`; (2) kernel config `CONFIG_BT`, `BT_HCIUART`, `BT_HCIUART_QCA`, serial8250-free Samsung UART (`SERIAL_SAMSUNG`);
+  (3) new boot image, test with `hciconfig`/`bluetoothctl`; (4) firmware files into the rootfs (or `/lib/firmware/qca/`) by hand first, packaged later.
