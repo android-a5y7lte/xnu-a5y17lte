@@ -3125,3 +3125,16 @@ Jimmy allowed reading the vendor sensor-hub driver read-only (Timeshift copy, `d
 m13a (sha256 `fca3f4a7…ccf7bca`) was flashed and read back, booted on Wi-Fi: `s3c64xx-spi 13930000.spi: error -19: Failed to get alias id`, so no SPI bus and no `/dev/spidev*`. The driver takes its bus number from an `aliases` entry.
 - Fix in `exynos7880.dtsi`: `spi2 = &spi_2;` (the device is then `/dev/spidev2.0`; the probe tool now opens that path). m13b: `DECON=1 MILESTONE=m13b ./build-mainline.sh`, sha256 `f5783a93…dd1264`, 16097296 B, same module set as m12b/m13a.
 - The probe binary was already pushed to the phone's /tmp (RAM); it has to be pushed again for the new path.
+
+## 74. Sensor hub: first contact, the MCU answers the handshake but not the first request (2026-11-02)
+
+m13b (sha256 `f5783a93…dd1264`) flashed and read back, booted on Wi-Fi: `spi spi2.0` probes, `/dev/spidev2.0` exists. `sensorhub-probe` (static, pushed to the phone's /tmp; `pulse` and `reset` modes, env `SPI_MODE`, `SPI_HZ`, `WATCH_MS`):
+- GPIOs: all five lines request fine (the gpiochips are labelled by bank name, numbering goes beyond 16). Idle levels: mcu_int1 = 1, mcu_int2 = 1.
+- **Pulling `ap_int` (gpd1-5) low makes `mcu_int2` (gpa2-5) go low** in about 20 ms, so the MCU is alive and watches the line (this only worked when the MCU had been woken by a first pulse; right after a fresh boot of the phone it "never went low" in the first run).
+- After sending the 9-byte WHOAMI header and raising `ap_int`, `mcu_int2` goes high again as in the vendor sequence, but `mcu_int1` never falls: no answer within 1 s, and no line change in 4 s afterwards (modes 3 and the others, 1 and 8 MHz).
+- **The MCU's own messages do reach us:** once `mcu_int1` was low and a 4-byte read gave `03 00 01 00` = options 3 (AP2HUB_READY) with length 1, a valid header (the 1-byte payload was not read, which then
+  desynchronised the next reads). After a reset pulse (`reset`: reset low 2 ms, 500 ms or 3 s wait) `mcu_int1` goes low and the first 4 bytes read `00 00 00 c0`, which is the same message shifted by two bits (3 << 30), so the very first
+  read after the MCU starts is misaligned (or is something else, e.g. bootloader traffic).
+- Unresolved: whether the header reaches the MCU at all (MOSI/SCK mapping, PIO and the controller's byte swap mode, chip select timing), whether the MCU runs the application or a bootloader (the vendor driver checks this before WHOAMI, and flashes
+  the firmware when the version differs), and whether it needs a different start-up (e.g. AP2HUB_READY handling, time sync). Next experiments: scope-free checks of MOSI with a loopback of the SPI controller, reading the bootloader state (STM32 system bootloader answers 0x79 to 0x7f on UART/SPI?), and the vendor `check_fwbl`/`ssp_firmware.c` logic (allowed to read).
+The probe tool changes (drain, pulse mode, env overrides, `/dev/spidev2.0`, chip scan up to 64) are in `mainline/tools/sensorhub-probe.c`.

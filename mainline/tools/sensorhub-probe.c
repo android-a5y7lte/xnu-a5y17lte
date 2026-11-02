@@ -45,7 +45,7 @@ static int open_line(struct line *l, int initial)
 	struct gpio_v2_line_request rq;
 	int i, fd;
 
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < 64; i++) {
 		snprintf(path, sizeof(path), "/dev/gpiochip%d", i);
 		fd = open(path, O_RDWR);
 		if (fd < 0)
@@ -123,10 +123,39 @@ static void dump(const char *what, const uint8_t *b, int n)
 }
 
 static int spi_fd = -1;
+static int watch_ms = 4000;
 
 static void status(const char *when)
 {
 	printf("[%s] mcu_int1=%d mcu_int2=%d\n", when, get(&L_INT1), get(&L_INT2));
+}
+
+/* the MCU pulls mcu_int1 low when it has something to say: read the 4 byte header and the payload, like the vendor IRQ handler */
+static void drain(const char *when)
+{
+	uint8_t h4[4], buf[1024];
+	int n = 0;
+
+	while (get(&L_INT1) == 0 && n++ < 16) {
+		uint16_t o, l;
+
+		if (read(spi_fd, h4, 4) != 4) {
+			printf("[%s] drain: header read failed\n", when);
+			return;
+		}
+		o = h4[0] | (h4[1] << 8);
+		l = h4[2] | (h4[3] << 8);
+		printf("[%s] drain: options=0x%04x (type %u) length=%u  raw %02x %02x %02x %02x\n", when, o, o & 3, l,
+		       h4[0], h4[1], h4[2], h4[3]);
+		if (l == 0 || l > sizeof(buf))
+			return;
+		if (read(spi_fd, buf, l) != l) {
+			printf("[%s] drain: payload read failed\n", when);
+			return;
+		}
+		dump("  payload", buf, l);
+		usleep(2000);
+	}
 }
 
 /* send one request and print the answer; the answer length is len (for reads) */
@@ -156,7 +185,19 @@ static int request(uint8_t cmd, uint16_t len, uint16_t options, uint8_t *reply)
 		uint16_t o, l;
 
 		if (wait_level(&L_INT1, 0, 1000)) {
-			printf("cmd 0x%02x: no answer (mcu_int1 stays high)\n", cmd);
+			int t, a = get(&L_INT1), b = get(&L_INT2), na, nb;
+
+			printf("cmd 0x%02x: no answer within 1 s (int1=%d int2=%d); watching %d ms more\n", cmd, a, b, watch_ms);
+			for (t = 0; t < watch_ms; t++) {
+				usleep(1000);
+				na = get(&L_INT1);
+				nb = get(&L_INT2);
+				if (na != a || nb != b) {
+					printf("  +%d ms: mcu_int1=%d mcu_int2=%d\n", t, na, nb);
+					a = na;
+					b = nb;
+				}
+			}
 			return -3;
 		}
 		if (read(spi_fd, h4, 4) != 4) {
@@ -191,8 +232,16 @@ static int request(uint8_t cmd, uint16_t len, uint16_t options, uint8_t *reply)
 int main(int argc, char **argv)
 {
 	int do_reset = argc > 1 && !strcmp(argv[1], "reset");
+	int do_pulse = argc > 1 && !strcmp(argv[1], "pulse");
 	uint8_t mode = SPI_MODE_3, bits = 8, reply[8];
 	uint32_t speed = 2000000;
+
+	if (getenv("SPI_MODE"))
+		mode = atoi(getenv("SPI_MODE"));
+	if (getenv("SPI_HZ"))
+		speed = atoi(getenv("SPI_HZ"));
+	if (getenv("WATCH_MS"))
+		watch_ms = atoi(getenv("WATCH_MS"));
 	int ret;
 
 	if (open_line(&L_BOOT0, 0) || open_line(&L_APINT, 1) || open_line(&L_RST, 1) ||
@@ -209,12 +258,25 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	status("start");
+	drain("start");
+	if (do_pulse) {	/* ap_int low for 20 ms without a header: what does the MCU do? */
+		set(&L_APINT, 0);
+		msleep(20);
+		status("ap_int low");
+		set(&L_APINT, 1);
+		msleep(50);
+		status("ap_int high again");
+		drain("after pulse");
+		status("after pulse drain");
+	}
 	if (do_reset) {
 		set(&L_RST, 0);
 		msleep(2);
 		set(&L_RST, 1);
-		msleep(500);
-		status("after reset + 500 ms");
+		msleep(3000);
+		status("after reset + 3 s");
+		drain("after reset");
+		status("after drain");
 	}
 
 	printf("WHOAMI (0x0f), expect 0x55:\n");
