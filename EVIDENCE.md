@@ -3016,3 +3016,14 @@ Read from the project's vendor reference (`upstream/k7880`, as in EVIDENCE 35) a
   `cnss_dcdc_en` (stays on only while the Wi-Fi card is bound; not handled by hci_qca). Config: `SERIAL_SAMSUNG`, `SERIAL_DEV_BUS`, `BT`, `BT_HCIUART`, `BT_HCIUART_SERDEV`, `BT_HCIUART_QCA`, `BT_QCA` all built in (=y).
 - Not yet checked: that the rootfs module set (cfg80211, mac80211, ath10k..., 11 modules) still matches the m12a build (the phone was off the network when I tried; compare sha256 of `/usr/lib/modules/7.2.0-a5y17lte` against `build/modules` before flashing).
 - Test plan: flash from TWRP (Jimmy's OK), boot, `dmesg | grep -iE 'bluetooth|hci|qca|ttySAC'`, `ls /sys/class/bluetooth`, `hciconfig -a`/`bluetoothctl list`; expected first problems: wrong UART clock, firmware file names (`qca/rampatch_*`, `qca/nvm_*`), chip power. Fallbacks: m11c, m11b.
+
+## 64. Bluetooth works on m12a (2026-11-02)
+
+m12a flashed to BOOT from TWRP (sha256 `99c1d588…865974`, read-back verified), booted on Wi-Fi.
+- UART at 0x13810000 comes up as `ttySAC0`/`serial0-0` with the measured 133.25 MHz clock; `hci_uart_qca` finds the chip: `QCA Product ID 0x08, SOC 0x23, ROM 0x302, patch 0x111, controller 0x00230302`.
+- **Power timing:** the first two setup attempts (0.26 s and ~8 s after boot) time out (`command 0xfc00 tx timeout`), the third at ~21 s works. Cause (likely): the chip's supply `cnss_dcdc_en` (gpd3-3) is only switched on when the Wi-Fi SDIO card is probed. Fix for a later image: give the bluetooth node its own reference to the regulator (it is not handled by `hci_qca` for this chip), or make `cnss_dcdc_en` `regulator-boot-on`.
+- **Firmware:** `qca/rampatch_00230302.bin` and `qca/nvm_00230302.bin` are in linux-firmware (pmOS package `linux-firmware-qca`, 20260916-r0); installed on the phone with `apk add linux-firmware-qca` (a SYSTEM write, with Jimmy's OK; not in git, not in the rootfs image build yet).
+  After that, unbinding/rebinding the serdev driver (`/sys/bus/serial/drivers/hci_uart_qca/{unbind,bind}`) ended with `QCA setup on UART is completed`.
+- **Radio test:** `apk add bluez` (also with Jimmy's OK), `rc-service bluetooth start`, `bluetoothctl power on` and `scan on` for 15 s found 10 nearby devices (own test device included), so TX/RX and the antenna path work.
+  The controller address is the placeholder `00:00:00:00:5A:AD` (the chip has no BD address programmed; a real one needs the NVM tag or `btmgmt public-addr`/`bdaddr` quirk, to be decided).
+- **Still open:** pairing/audio test with a real device; the power-timing fix; `CONFIG_RFKILL` (no `/dev/rfkill`, so Phosh's Bluetooth switch cannot work); `rc-update add bluetooth` and the service ordering; BT_WAKE/BT_HOST_WAKE (low power); a stable BD address; package the firmware and bluez in `build-pmos.sh`.
