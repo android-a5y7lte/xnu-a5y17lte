@@ -3035,3 +3035,14 @@ m12a flashed to BOOT from TWRP (sha256 `99c1d588…865974`, read-back verified),
 - Image `out/a5y17lte-mainline-m12b-boot.img`, 16027664 B, sha256 `10b9303b…990e4b`. Module set: only `net/wireless/cfg80211.ko` differs from the installed one (new sha `62f40ac2…187b23`; the other 10 are
   bit-identical), because cfg80211 grows rfkill support. mac80211/ath10k are unchanged, so the exported symbol versions should not have moved; to be safe the new cfg80211.ko is copied to the phone's
   `/usr/lib/modules/7.2.0-a5y17lte/kernel/net/wireless/` (a SYSTEM write, needs Jimmy's OK) before or right after flashing; the installed old one should still load, without the rfkill hook (to check).
+
+## 66. m12b flashed: Bluetooth comes up by itself at boot (2026-11-02)
+
+m12b (sha256 `10b9303b…990e4b`) flashed from TWRP and read back; the new `cfg80211.ko` (sha `62f40ac2…187b23`, old one kept as `cfg80211.ko.m12a-old`) copied into the rootfs; Wi-Fi works.
+- `regulator-boot-on` on `cnss_dcdc_en`: the chip answers the very first setup (0.26 s) instead of timing out twice. `/dev/rfkill` exists (`rfkill list` shows hci0 soft/hard unblocked).
+- The first setup still fails with -2 (firmware not found: the rootfs is not mounted yet at 0.3-0.9 s). Fix: OpenRC service `a5y17lte-btfw` (`pmos/device-samsung-a5y17lte/a5y17lte-btfw.initd`, installed as
+  `/etc/init.d/a5y17lte-btfw`, `rc-update add ... default`, plus `rc-update add bluetooth default`) rebinding the serdev driver once the rootfs is up (SYSTEM writes, with Jimmy's OK).
+- **Race found:** the first version rebound at ~11.7 s while the Wi-Fi firmware was still starting (ath10k firmware 9.0 to 13.9 s on the same combo chip); setup finished but the controller then hung at bluez's first
+  command (`Opcode 0x0c24 failed: -110`, "crash the soc", repeated `Reading QCA version information failed (-110)`). A manual rebind with Wi-Fi up worked. The service now waits for `wlan0` and 5 s more.
+- **Result after the second reboot:** setup at 20.9 s ("QCA setup on UART is completed" at 21.9 s), `bluetoothctl show` = Powered: yes, a 10 s scan found 7 devices, no hci0 timeout in dmesg, service started on its own.
+- Still open: pairing/audio, BT_WAKE/BT_HOST_WAKE, a real BD address (placeholder 00:00:00:00:5A:AD), Phosh's Bluetooth switch (not tried), put firmware + bluez + the service + cfg80211/rfkill config into `build-pmos.sh`/the device package.

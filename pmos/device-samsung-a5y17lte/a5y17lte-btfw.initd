@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+# The QCA Bluetooth chip is set up by hci_qca while the kernel boots, before the rootfs (and so
+# /lib/firmware/qca) is mounted, so the firmware download fails. Redo the setup once the rootfs is up.
+description="Redo the Bluetooth chip setup now that the QCA firmware is readable"
+
+depend() {
+	need localmount
+	before bluetooth
+}
+
+start() {
+	local drv=/sys/bus/serial/drivers/hci_uart_qca dev=serial0-0
+	[ -e "$drv/$dev" ] || return 0
+	[ -e /lib/firmware/qca/rampatch_00230302.bin.zst ] || [ -e /lib/firmware/qca/rampatch_00230302.bin ] || return 0
+	# the Wi-Fi side of the same chip must be through its own firmware start first (both at once hung the
+	# controller on the first bluez command, EVIDENCE 66): wait for wlan0, then let it settle
+	local i=0
+	while [ ! -e /sys/class/net/wlan0 ] && [ $i -lt 60 ]; do sleep 1; i=$((i + 1)); done
+	sleep 5
+	ebegin "Redoing the Bluetooth chip setup"
+	echo "$dev" > "$drv/unbind"
+	sleep 1
+	echo "$dev" > "$drv/bind"
+	eend $?
+}
