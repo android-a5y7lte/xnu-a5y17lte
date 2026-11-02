@@ -3046,3 +3046,9 @@ m12b (sha256 `10b9303b…990e4b`) flashed from TWRP and read back; the new `cfg8
   command (`Opcode 0x0c24 failed: -110`, "crash the soc", repeated `Reading QCA version information failed (-110)`). A manual rebind with Wi-Fi up worked. The service now waits for `wlan0` and 5 s more.
 - **Result after the second reboot:** setup at 20.9 s ("QCA setup on UART is completed" at 21.9 s), `bluetoothctl show` = Powered: yes, a 10 s scan found 7 devices, no hci0 timeout in dmesg, service started on its own.
 - Still open: pairing/audio, BT_WAKE/BT_HOST_WAKE, a real BD address (placeholder 00:00:00:00:5A:AD), Phosh's Bluetooth switch (not tried), put firmware + bluez + the service + cfg80211/rfkill config into `build-pmos.sh`/the device package.
+
+## 67. Bluetooth pairing check (2026-11-02)
+
+Jimmy's own phone (A55) was already paired with the A5 (pairing done by Jimmy earlier, from the A55 or Phosh). `bluetoothctl info` on the A5: Paired yes, Bonded yes, Trusted yes, Connected yes; a new `pair` returned
+`org.bluez.Error.AlreadyExists`. So pairing, bonding and the encrypted ACL link work through the UART HCI path on m12b. Not tested: audio profiles (the A5 has no audio driver yet), file transfer, reconnect after reboot,
+the Phosh Bluetooth switch. The pairing keys live in `/var/lib/bluetooth` on SYSTEM.
