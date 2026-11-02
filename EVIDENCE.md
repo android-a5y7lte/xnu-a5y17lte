@@ -2961,3 +2961,18 @@ Built only, nothing flashed or booted (the battery is being charged powered off,
 - **Test plan** (battery above about 30 %, charged powered off first): flash m11c from TWRP; boot 1 with the phone on the PC's USB port, read `dmesg | grep 'a5-diag: muic'`;
   boot 2 with the wall charger plugged in at power-on and no PC (SSH over Wi-Fi), read the same line. If `dev1` differs (0x04 USB versus 0x40/0x44/0x60 charger, or the apple/chg bytes), a service can
   raise the charger input limit for the charger case; otherwise the cable cannot be told apart at boot either and the limit stays at 500 mA.
+
+## 60. Boot-time MUIC cable detection: no difference between PC port and wall charger (2026-11-02)
+
+m11c (EVIDENCE 59) flashed to BOOT from TWRP (battery 100 %, 4.37 V; sha256 `a1376eb4…923f5e` verified on the phone before the write and by pull-back after it) and booted twice.
+- **Boot 1, PC USB port:** `a5-diag: muic before the switch: rev 29 adc 00 dev1 00 dev2 00 dev3 01 chg 00 apple 06 st0 a0 ctrl1 17 sw 00`.
+- **Boot 2, wall charger plugged in at power-on, no PC (SSH over Wi-Fi):** `rev 29 adc 00 dev1 00 dev2 00 dev3 01 chg 00 apple 04 st0 00 ctrl1 17 sw 00`.
+- The cable-type registers (adc, dev1, dev2, dev3, chg) are identical, so S-Boot's detection left no cable-type information to use. Only `apple` (06 vs 04) and `st0` (a0 vs 00) differ; `st0` read 00 at 0.76 s
+  although the charger reports online a little later, so both look like settling time, not cable type. Conclusion: the MUIC registers cannot tell the cable at boot either; the idea in EVIDENCE 58 fails.
+- With the wall charger and no host: `/sys/class/udc/13600000.usb/state` = `not attached`, `usb0` NO-CARRIER. With a PC port it is expected to be `configured` (not yet logged).
+- **Next idea, not built:** use the gadget state as the signal (VBUS present but no host enumerates within N seconds = plain charger), with a writable `input_current_limit` in the charger driver that falls back to
+  500 mA when the state changes or VBUS drops. To check first with `tools/udc-probe.sh` (read-only, 1 s log of UDC state, usb0 carrier, charger online, battery current, STATUS0, DEVICE_APPLE): PC port gives `configured`?
+  a PC port that does not enumerate (suspended host) and a hot-plugged wall charger give what, and does the state stay stable?
+- **Observation (Jimmy), cause unknown:** at 100 % battery, pressing Power from fully off did nothing; the phone only came up after download mode and Volume Down, and stuck briefly at the Samsung logo first. Not a battery-level
+  problem this time. It may be an S-Boot or PMIC state left over from the earlier brownouts (EVIDENCE 58); the m11c image has the same kernel, config and DT as m11b and only runs after S-Boot, so it is not suspected.
+  Watch whether it repeats.
