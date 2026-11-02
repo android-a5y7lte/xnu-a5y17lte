@@ -3061,3 +3061,13 @@ the Phosh Bluetooth switch. The pairing keys live in `/var/lib/bluetooth` on SYS
   battery) and the DT (UART, regulator-boot-on) come from the same files as the boot image, so the packaged `cfg80211.ko` is the rfkill one (sha `62f40ac2…187b23`, to be verified in the built image).
 - Not done: the `./build-pmos.sh` run itself (needs sudo, long), so nothing is built or flashed. The package DT does not switch the display driver on (`&decon` is only added by `DECON=1` in build-mainline.sh), the same as before.
   Pending for the rootfs rebuild: the CMA modules for the display driver, the hand-installed extras still on the phone (python tools, etc.), brightness persistence.
+
+## 69. Rootfs rebuilt with Bluetooth (2026-11-02), built and checked on the PC only, NOT written to the phone
+
+`./build-pmos.sh` (sudo, ~9 min: kernel package 7-r5 cross-built in the chroot, device package 3-r11) produced `build/pmos/samsung-a5y17lte-root.img`, 1781530624 B, sha256 `b9a0598e…4b355`, e2fsck clean (22932 files, 370063/434944 blocks).
+- In the image (debugfs): default runlevel has `bluetooth`, `a5y17lte-btfw`, `a5y17lte-keyled`, `a5y17lte-usbnet`; `/lib/firmware/qca` has `rampatch_00230302.bin.zst` and `nvm_00230302.bin.zst`; `/usr/lib/bluetooth/bluetoothd`, `/usr/bin/bluetoothctl`, `/etc/init.d/a5y17lte-btfw` exist.
+- The packaged modules (`/usr/lib/modules/7.2.0-a5y17lte`) are NOT byte-identical to `build/modules` of the boot-image build (cfg80211 616584 B vs 650096 B, mac80211 856728 vs 908088, different sha256): same input `.config`
+  (the pmaports copy equals `upstream/linux/.config`), same vermagic `7.2.0-a5y17lte SMP preempt aarch64`, no CONFIG_MODVERSIONS, but the pmOS chroot compiler/flags differ from the host build. Struct layouts follow the config, so they
+  should load (earlier rootfs images used the same arrangement and Wi-Fi worked), but it is unproven for this image.
+- **What a rootfs write would wipe:** everything on SYSTEM that is not in the image: the saved Wi-Fi connection (NetworkManager), the Bluetooth pairing in `/var/lib/bluetooth`, the user's home, hand-installed extras (python tools, the m12 `cfg80211.ko` swap), `rc-update` changes, settings. After a write the Wi-Fi password has to be entered again in Phosh and the A55 re-paired.
+  Writing it is a SYSTEM write: needs Jimmy's OK, TWRP, a pull-back compare on the PC, then growing the filesystem to 4.6G with ext4-grow (EVIDENCE 25) and a reboot test, as for EVIDENCE 33/39.
