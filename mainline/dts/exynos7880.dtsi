@@ -193,6 +193,25 @@
 		clock-output-names = "peri_uart_bt_uclk_fixed";
 	};
 
+	/*
+	 * TEMPORARY: SPI_SENSORHUB (SPI2 at 0x13930000, EVIDENCE 71/72) clock, no PERI/CCORE clock driver yet.
+	 * Measured on the phone: CCORE SPI_SENSORHUB mux bit 12 = 0 (BUS_PLL/2 = 799.5 MHz), div field 9 (/10),
+	 * gate open, so 79.95 MHz. The pclk rate is only nominal (gate).
+	 */
+	clk_peri_spi2_pclk: clock-peri-spi2-pclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <79950000>;
+		clock-output-names = "peri_spi2_pclk_fixed";
+	};
+
+	clk_peri_spi2_src: clock-peri-spi2-src {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <79950000>;
+		clock-output-names = "peri_spi2_src_fixed";
+	};
+
 	/* [D] psci: method smc, cpu_suspend 0xC4000001 (same IDs as [M]) */
 	psci {
 		compatible = "arm,psci";
@@ -293,6 +312,20 @@
 			clock-names = "uart", "clk_uart_baud0";
 			clocks = <&clk_peri_uart_bt_pclk>, <&clk_peri_uart_bt_uclk>;
 			samsung,uart-fifosize = <256>;
+			status = "disabled";
+		};
+
+		/* [D] spi_2: spi@13930000 ("SENSORHUB"), SPI 455, 64-byte FIFO; PIO only (no DMA node yet) */
+		spi_2: spi@13930000 {
+			compatible = "samsung,exynos7-spi";
+			reg = <0x13930000 0x100>;
+			interrupts = <GIC_SPI 455 IRQ_TYPE_LEVEL_HIGH>;
+			clock-names = "spi", "spi_busclk0";
+			clocks = <&clk_peri_spi2_pclk>, <&clk_peri_spi2_src>;
+			samsung,spi-src-clk = <0>;
+			num-cs = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 			status = "disabled";
 		};
 

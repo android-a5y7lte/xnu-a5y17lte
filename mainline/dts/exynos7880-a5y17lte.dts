@@ -609,3 +609,46 @@
 		max-speed = <3000000>;
 	};
 };
+
+/*
+ * Sensor hub (EVIDENCE 70-72): STM32F410 MCU on SPI2, mode 3, 8 MHz max. First step is a userspace probe through
+ * spidev (python + libgpiod): reset gpf4-2, boot0 gpd2-0 (0), ap_int gpd1-5, mcu_int1 gpa0-7, mcu_int2 gpa2-5 are plain GPIOs
+ * driven from userspace; chip select is the GPIO gpc4-3. MOSI/SCK gpc4-2, gpc5-1 and MISO gpc5-0 are function 3.
+ */
+&pinctrl_top {
+	spi2_bus_pins: spi2-bus-pins {
+		samsung,pins = "gpc4-2", "gpc5-1";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_3>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	spi2_miso_pin: spi2-miso-pins {
+		samsung,pins = "gpc5-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_3>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	spi2_cs_pin: spi2-cs-pins {
+		samsung,pins = "gpc4-3";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+};
+
+&spi_2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi2_bus_pins &spi2_miso_pin &spi2_cs_pin>;
+	cs-gpios = <&gpc4 3 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	sensorhub@0 {
+		compatible = "rohm,dh2228fv";	/* stand-in so that spidev binds, until a real driver exists */
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		spi-cpol;
+		spi-cpha;
+	};
+};

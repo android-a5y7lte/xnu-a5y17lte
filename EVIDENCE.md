@@ -3106,3 +3106,16 @@ Jimmy allowed reading the vendor sensor-hub driver read-only (Timeshift copy, `d
   then enable sensors by adding them with a delay. Batching, big data, libraries (gesture, calibration) are optional.
 - **What mainline needs:** (1) `CONFIG_SPI_S3C64XX` with an `exynos7870`-style SPI node for 0x13930000 (SPI2) with fixed clocks like the UARTs (EVIDENCE 63; the rate has to be measured from CMU_CCORE/CMU_PERI), (2) an `iio`/input driver doing the protocol above.
   A quick first step needs no driver: a `spidev` node plus a userspace probe (python + libgpiod, as for the panel) doing reset, handshake and WHOAMI; if the MCU answers 0x55 and the scan mask lists accelerometer/magnetometer/proximity, a kernel driver is straightforward.
+
+## 72. SPI2 clock measured, m13a and the first sensor-hub probe built (2026-11-02), NOT flashed, untested
+
+- **SPI2 (SPI_SENSORHUB) clock, read on the phone via /dev/mem (read only):** CMU_CCORE (0x10680000) `CLK_CON_MUX_CLKCMU_PERI_SPI_SENSORHUB` (+0x2c0) = 0x00200000 (select bit 12 = 0 = BUS_PLL/2 = 799.5 MHz, gate bit 21),
+  `..DIV..` (+0x4c0) = 9 (6-bit field, /10), `..ENABLE..` (+0x8c0) = 1: the SPI source clock is **79.95 MHz**. The PERI-side gate was not looked up (S-Boot left the block usable for the UART case).
+- **m13a** (`DECON=1 MILESTONE=m13a ./build-mainline.sh`, sha256 `fca3f4a7…ccf7bca`, 16097296 B): on top of m12b, `exynos7880.dtsi` has two TEMPORARY fixed clocks (79.95 MHz) and `spi_2: spi@13930000`
+  (`samsung,exynos7-spi`, which the binding marks deprecated but the driver still matches; SPI 455, PIO only, no DMA node), the board DT enables it with pins (MOSI/SCK gpc4-2, gpc5-1 and MISO gpc5-0 function 3, chip select gpc4-3 as a
+  GPIO via `cs-gpios`) and a `sensorhub@0` child (`rohm,dh2228fv` as the stand-in compatible so spidev binds; mode 3, 4 MHz). Config: `SPI`, `SPI_S3C64XX`, `SPI_SPIDEV` built in. The 11-module rootfs set is bit-identical to m12b's, so no module change is needed.
+- **Probe tool** `mainline/tools/sensorhub-probe.c` (static aarch64, built with `upstream/userspace/bin/aarch64-musl-cc -static`, no library, not in git as a binary): GPIO character device v2 + spidev; `sensorhub-probe reset` pulses reset with boot0 low,
+  waits 500 ms, then sends WHOAMI (0x0f, expects 0x55), the sensor scan (0xf4, 8 byte mask) and the firmware revision (0xf0), printing the handshake levels (mcu_int1/mcu_int2), every message header and any frame the MCU pushes. It only writes the SPI
+  headers and the five GPIOs (reset gpf4-2, boot0 gpd2-0, ap_int gpd1-5 outputs; mcu_int1 gpa0-7, mcu_int2 gpa2-5 inputs); the binary is pushed to the phone's RAM (/tmp) only.
+- **Test plan:** flash m13a (Jimmy's OK, TWRP), boot, check `ls /dev/spidev0.0` and dmesg for the SPI driver, push the probe, run it once without and once with `reset`. If WHOAMI answers 0x55 the transport is right.
+  Risks: the MCU may be silent without the AP's full start-up (an MCU reset notice, then the AP initialization), the handshake polarity may differ from my reading, and a wrong GPIO pull could confuse the MCU (it recovers with a reset).
