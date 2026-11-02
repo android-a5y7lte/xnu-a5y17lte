@@ -229,12 +229,70 @@ static int request(uint8_t cmd, uint16_t len, uint16_t options, uint8_t *reply)
 	return -7;
 }
 
+/* STM32 system bootloader handshake as in the vendor driver: boot0 high, reset, SPI mode 0, sync byte 0x5a, poll with 0x00 until
+ * 0x79 (ACK) or 0x1f (NACK). Non-destructive: no command is sent; a reset with boot0 low afterwards restarts the application. */
+static int xfer1(uint8_t tx, uint8_t *rx)
+{
+	struct spi_ioc_transfer t;
+
+	memset(&t, 0, sizeof(t));
+	t.tx_buf = (unsigned long)&tx;
+	t.rx_buf = (unsigned long)rx;
+	t.len = 1;
+	return ioctl(spi_fd, SPI_IOC_MESSAGE(1), &t);
+}
+
+static void bootloader_probe(void)
+{
+	uint8_t m0 = SPI_MODE_0, rx = 0;
+	int i, seen = 0;
+	uint8_t hist[300];
+
+	ioctl(spi_fd, SPI_IOC_WR_MODE, &m0);
+	set(&L_BOOT0, 1);
+	usleep(150);
+	set(&L_RST, 0);
+	msleep(2);
+	set(&L_RST, 1);
+	msleep(2);
+	set(&L_BOOT0, 0);
+	msleep(40);
+	status("bootloader requested");
+	xfer1(0x5a, &rx);
+	printf("sync byte sent, rx while sending: 0x%02x\n", rx);
+	for (i = 0; i < 255; i++) {
+		if (xfer1(0x00, &rx) < 0) {
+			printf("spi transfer failed: %s\n", strerror(errno));
+			return;
+		}
+		hist[seen++] = rx;
+		if (rx == 0x79 || rx == 0x1f) {
+			printf("bootloader answered 0x%02x after %d polls\n", rx, i + 1);
+			break;
+		}
+		usleep(1000);
+	}
+	if (rx != 0x79 && rx != 0x1f)
+		printf("no ACK/NACK in 255 polls\n");
+	dump("poll history", hist, seen < 48 ? seen : 48);
+	/* send ACK back like the vendor driver, then leave: reset with boot0 low restarts the application */
+	if (rx == 0x79 || rx == 0x1f)
+		xfer1(0x79, &rx);
+	set(&L_BOOT0, 0);
+	set(&L_RST, 0);
+	msleep(2);
+	set(&L_RST, 1);
+	msleep(500);
+	status("application restarted");
+}
+
 int main(int argc, char **argv)
 {
 	int do_reset = argc > 1 && !strcmp(argv[1], "reset");
 	int do_pulse = argc > 1 && !strcmp(argv[1], "pulse");
-	uint8_t mode = SPI_MODE_3, bits = 8, reply[8];
-	uint32_t speed = 2000000;
+	int do_boot = argc > 1 && !strcmp(argv[1], "boot");
+	uint8_t mode = SPI_MODE_1, bits = 8, reply[8];
+	uint32_t speed = 4800000;
 
 	if (getenv("SPI_MODE"))
 		mode = atoi(getenv("SPI_MODE"));
@@ -258,6 +316,10 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	status("start");
+	if (do_boot) {
+		bootloader_probe();
+		return 0;
+	}
 	drain("start");
 	if (do_pulse) {	/* ap_int low for 20 ms without a header: what does the MCU do? */
 		set(&L_APINT, 0);

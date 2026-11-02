@@ -3138,3 +3138,16 @@ m13b (sha256 `f5783a93…dd1264`) flashed and read back, booted on Wi-Fi: `spi s
 - Unresolved: whether the header reaches the MCU at all (MOSI/SCK mapping, PIO and the controller's byte swap mode, chip select timing), whether the MCU runs the application or a bootloader (the vendor driver checks this before WHOAMI, and flashes
   the firmware when the version differs), and whether it needs a different start-up (e.g. AP2HUB_READY handling, time sync). Next experiments: scope-free checks of MOSI with a loopback of the SPI controller, reading the bootloader state (STM32 system bootloader answers 0x79 to 0x7f on UART/SPI?), and the vendor `check_fwbl`/`ssp_firmware.c` logic (allowed to read).
 The probe tool changes (drain, pulse mode, env overrides, `/dev/spidev2.0`, chip scan up to 64) are in `mainline/tools/sensorhub-probe.c`.
+
+## 75. Sensor hub: vendor SPI modes found, still no clean data (2026-11-02)
+
+Read from the vendor `ssp_firmware.c` / `ssp_dev.c` (allowed, read-only): `check_fwbl` is not a separate bootloader test, it just asks the firmware revision with the normal protocol (cmd 0xf0) and compares it with the expected 18011800 (invalid values
+99999 / 0xffffff mean "download needed"). The SPI settings differ by phase: **application = SPI mode 1, 4.8 MHz** (`NORM_SPI_HZ`; the DT's cpol+cpha = mode 3 is overridden by the driver), **STM32 system bootloader = mode 0, 4.8 MHz**, entered with boot0 high, reset low ~1 ms,
+reset high, boot0 low again after 1 ms, 30 ms wait, then sync byte 0x5a and polling with 0x00 until 0x79 (ACK) or 0x1f (NACK).
+- `sensorhub-probe` now defaults to mode 1 / 4.8 MHz and has a `boot` mode for the bootloader handshake (non-destructive, then restarts the application). Results on m13b:
+  - mode 1, from a clean reset: the first header reads `01 00 00 80`, WHOAMI "answers" `2a aa aa aa ...`, the scan `3b 20 a7 f9`, then `mcu_int2` stops going low: junk patterns, no protocol.
+  - bootloader handshake: `d2` once, then `3c 3c 3c ...` for 255 polls, never 0x79/0x1f.
+  - The pinctrl debugfs shows the pins claimed by the SPI function (gpc4-2/gpc5-1 `spi2-bus-pins`, gpc5-0 `spi2-miso-pins`, gpc4-3 `spi2-cs-pins`); no SPI timeouts in dmesg, so the controller shifts bytes.
+- So far: the MCU reacts to `ap_int` (mcu_int2 follows it, so the application is running and powered) and sent one plausible AP2HUB_READY header once, but every other read looks like a floating or mis-sampled MISO line. Suspects, in this order: MOSI/SCK vs MISO pad configuration
+  or pull (the vendor MISO pad has pull-down in sleep, pud 0 active), the SPI controller's data sampling (feedback clock delay, the `swap-mode` and DMA mode of the vendor DT, `spi-src-clk`), the chip-select timing (the vendor driver uses a GPIO CS with the controller in manual mode),
+  a missing MCU supply or pull-up that S-Boot does not set, and a protocol step I have not seen (time sync / reset notice). Needs a logic analyser or the MCU's reaction to a known pattern to go further; blind probing is slow.
