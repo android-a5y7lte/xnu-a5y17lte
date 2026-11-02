@@ -3071,3 +3071,16 @@ the Phosh Bluetooth switch. The pairing keys live in `/var/lib/bluetooth` on SYS
   should load (earlier rootfs images used the same arrangement and Wi-Fi worked), but it is unproven for this image.
 - **What a rootfs write would wipe:** everything on SYSTEM that is not in the image: the saved Wi-Fi connection (NetworkManager), the Bluetooth pairing in `/var/lib/bluetooth`, the user's home, hand-installed extras (python tools, the m12 `cfg80211.ko` swap), `rc-update` changes, settings. After a write the Wi-Fi password has to be entered again in Phosh and the A55 re-paired.
   Writing it is a SYSTEM write: needs Jimmy's OK, TWRP, a pull-back compare on the PC, then growing the filesystem to 4.6G with ext4-grow (EVIDENCE 25) and a reboot test, as for EVIDENCE 33/39.
+
+## 70. Sensors: what the board has and what is missing (2026-11-02, investigation only, no code)
+
+From the project's vendor DT reference (`upstream/k7880`, `exynos7880-a5y17lte_eur_open_05.dts`); the vendor sensor-hub driver is not in that clone (it only has `include/linux/ssp_platformdata.h`).
+- **One sensor hub MCU, no individual sensor chips on the AP buses:** `spi_2: spi@13930000` ("SENSORHUB", pins `spi2_mosi_sck_ssn` + `spi2_miso` = gpc4-2, gpc5-0, gpc5-1, chip select gpc4-3 as a GPIO) with `STM32F@0`
+  (`compatible "ssp,STM32F"`, SPI mode 3 (cpol+cpha), max 8 MHz). Control lines: reset gpf4-2 (`ssp,rst-gpio`, active-high flag), boot0 gpd2-0 (`ssp,boot0-gpio`), `ap_int` gpd1-5 (AP to MCU), `mcu_int1` gpa0-7 and
+  `mcu_int2` gpa2-5 (MCU to AP interrupts); there is also a pin group `ssp_mcu_resp` on gpd1-6 (rev 0.1). Board data: accelerometer position 5, magnetometer position 7, `ssp-acc-type 1`, `ssp-mag-type 1`, `ssp-pressure-type 1`,
+  `ssp-glass-type 0`, proximity thresholds (hi 55, low 40, detect hi 250, detect low 130), AP rev 1. So there are accelerometer, magnetometer (compass), proximity and (type flags) pressure, possibly light and gyro, all behind the MCU.
+- **Firmware:** the original SYSTEM backup has no sensor-hub firmware file in `/etc/firmware`, `/vendor/firmware`, `/system/etc/firmware`; Samsung usually builds the MCU firmware into the kernel (`firmware/` of the vendor tree) and the AP flashes it
+  over the bootloader when the version differs, so the MCU most likely already holds a working firmware in its own flash and starts it on reset (BOOT0 low). Not verified.
+- **Mainline has nothing for it:** no SSP/sensor-hub driver, and our DT has no SPI controller node yet (the Exynos 7870 SPI driver `spi-s3c64xx` exists; the PERI clocks for it are the same unsolved CMU_PERI question as the UARTs, EVIDENCE 63).
+- **What is needed:** (1) the hub's message protocol (framing, instruction codes, sensor enable/read, interrupt handling, which only the vendor `ssp` driver documents), (2) an SPI node with fixed clocks like the UART one, (3) an IIO driver (accelerometer/magnetometer/proximity/light) or an iio-sensor-proxy feed for Phosh auto-rotate and proximity.
+- **Blocked on a permission:** reading the vendor sensor-hub driver (Timeshift copy, `drivers/sensorhub/...` or `drivers/sensors/ssp`) is not covered by what Jimmy allowed so far; without it only blind probing of the MCU is possible (reset it, clock bytes on SPI mode 3, see what comes back).
