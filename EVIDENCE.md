@@ -2976,3 +2976,14 @@ m11c (EVIDENCE 59) flashed to BOOT from TWRP (battery 100 %, 4.37 V; sha256 `a13
 - **Observation (Jimmy), cause unknown:** at 100 % battery, pressing Power from fully off did nothing; the phone only came up after download mode and Volume Down, and stuck briefly at the Samsung logo first. Not a battery-level
   problem this time. It may be an S-Boot or PMIC state left over from the earlier brownouts (EVIDENCE 58); the m11c image has the same kernel, config and DT as m11b and only runs after S-Boot, so it is not suspected.
   Watch whether it repeats.
+
+## 61. USB gadget state as a cable-type signal: PC and charger look the same when enumeration fails (2026-11-02)
+
+One 420 s run of `tools/udc-probe.sh` with hot-plugs (battery 100 %), plus a final check. Logs live in the phone's RAM, not in git.
+- Wall charger present at boot: UDC `not attached`, usb0 carrier 0. PC port plugged in (first time): `default` for ~1 s, then `configured`, carrier 1, stable. Wall charger hot-plugged: `default`, carrier 0, stable for
+  over 4 minutes. Unplug: online 0 within a second, `st0` 0x00, `apple` 0x04. Contact bounces gave online dips of 1-3 s while the UDC state stayed put.
+- **Final check, PC cable plugged in (hot-plug), wall charger removed:** the phone read online 1, `udc=default`, carrier 0, exactly like the wall charger; the PC's dmesg showed `device not accepting address .., error -71`,
+  `unable to enumerate USB device` (the known hot-plug enumeration failure, EVIDENCE 35-36). So a PC port whose enumeration fails is indistinguishable from a plain charger by the gadget state.
+- **Conclusion:** the gadget state cannot be used to raise the input limit automatically: a failed enumeration on a PC port (500 mA maximum) would be taken for a charger. Not built. The MUIC registers do not help either
+  (EVIDENCE 60). Options left: an explicit user opt-in (writable `input_current_limit` in the charger driver plus a toggle, wall chargers only), or fixing the hot-plug enumeration and the MUIC auto-detection
+  (the boot-time manual switch to USB disables the hardware cable detection). Until then the input limit stays at the safe 500 mA.
