@@ -3003,3 +3003,16 @@ Read from the project's vendor reference (`upstream/k7880`, as in EVIDENCE 35) a
 - Plan (each step reversible, no eMMC write until a rootfs change is wanted): (1) add a `cmu_peri` node and the UART1 (0x13810000) node with `uart0_bus` pins, serdev child `bluetooth` with
   shutdown-gpios gpd4-2, device-wakeup gpd5-1, host-wakeup gpa1-6, vddio from `cnss_dcdc_en`; (2) kernel config `CONFIG_BT`, `BT_HCIUART`, `BT_HCIUART_QCA`, serial8250-free Samsung UART (`SERIAL_SAMSUNG`);
   (3) new boot image, test with `hciconfig`/`bluetoothctl`; (4) firmware files into the rootfs (or `/lib/firmware/qca/`) by hand first, packaged later.
+
+## 63. Bluetooth: UART clock measured, m12a built (2026-11-02), NOT flashed, untested
+
+- **UART_BTWIFIFM clock (read on the phone via /dev/mem, read only):** CMU_CCORE (0x10680000) `CLK_CON_MUX_CLKCMU_PERI_UART_BTWIFIFM` (+0x2a4) = 0x00200000 (select bit 12 = 0 = BUS_PLL/2 = 799.5 MHz,
+  gate bit 21), `..DIV..` (+0x4a4) = 5 (4-bit field, /6), `..ENABLE..` (+0x8a4) = 1; CMU_PERI `CLK_ENABLE_CLK_PERI_UART_BTWIFIFM` (0x101f0830) = 1 (PCLK/EXT_UCLK gates open).
+  So the baud-source clock is 799.5 / 6 = **133.25 MHz** (same BUS_PLL/2 arithmetic as the eMMC clock, EVIDENCE 17b). The vendor mapping is serial_0 (0x13810000) = btwififm, serial_2 (0x13820000) = debug (console), the third = sensor.
+  (A combined read of more registers in one run gave a bus error; single reads work.)
+- **m12a** (`DECON=1 MILESTONE=m12a ./build-mainline.sh`, sha256 `99c1d588…865974`, 16027664 B): `mainline/dts/exynos7880.dtsi` gets two TEMPORARY fixed clocks (133.25 MHz) and `serial_bt: serial@13810000`
+  (`samsung,exynos7870-uart` + `exynos8895-uart` fallback, SPI 422, FIFO 256); `exynos7880-a5y17lte.dts` gets the pin groups (`gpb0-0..3` function 2; BT_EN `gpd4-2` output) and
+  `&serial_bt { bluetooth { compatible = "qcom,qca6174-bt"; enable-gpios = <&gpd4 2 ACTIVE_HIGH>; max-speed = <3000000>; } }`. BT_WAKE (gpd5-1) and BT_HOST_WAKE (gpa1-6) are not wired yet; the chip's supply is
+  `cnss_dcdc_en` (stays on only while the Wi-Fi card is bound; not handled by hci_qca). Config: `SERIAL_SAMSUNG`, `SERIAL_DEV_BUS`, `BT`, `BT_HCIUART`, `BT_HCIUART_SERDEV`, `BT_HCIUART_QCA`, `BT_QCA` all built in (=y).
+- Not yet checked: that the rootfs module set (cfg80211, mac80211, ath10k..., 11 modules) still matches the m12a build (the phone was off the network when I tried; compare sha256 of `/usr/lib/modules/7.2.0-a5y17lte` against `build/modules` before flashing).
+- Test plan: flash from TWRP (Jimmy's OK), boot, `dmesg | grep -iE 'bluetooth|hci|qca|ttySAC'`, `ls /sys/class/bluetooth`, `hciconfig -a`/`bluetoothctl list`; expected first problems: wrong UART clock, firmware file names (`qca/rampatch_*`, `qca/nvm_*`), chip power. Fallbacks: m11c, m11b.

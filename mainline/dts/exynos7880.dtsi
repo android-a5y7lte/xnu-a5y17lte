@@ -174,6 +174,25 @@
 		clock-output-names = "gout_mif_cmu_fsys_usb20drd_refclk";
 	};
 
+	/*
+	 * TEMPORARY: UART_BTWIFIFM (the Bluetooth UART at 0x13810000, EVIDENCE 62/63) clock, no PERI/CCORE clock driver
+	 * yet. Measured on the phone: CCORE UART_BTWIFIFM mux bit 12 = 0 (BUS_PLL/2 = 799.5 MHz), div field 5 (/6),
+	 * so 133.25 MHz; the PERI gates are open (S-Boot). The pclk rate is only nominal (gate).
+	 */
+	clk_peri_uart_bt_pclk: clock-peri-uart-bt-pclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <133250000>;
+		clock-output-names = "peri_uart_bt_pclk_fixed";
+	};
+
+	clk_peri_uart_bt_uclk: clock-peri-uart-bt-uclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <133250000>;
+		clock-output-names = "peri_uart_bt_uclk_fixed";
+	};
+
 	/* [D] psci: method smc, cpu_suspend 0xC4000001 (same IDs as [M]) */
 	psci {
 		compatible = "arm,psci";
@@ -262,6 +281,18 @@
 			compatible = "samsung,exynos7880-decon";
 			reg = <0x14830000 0x10000>, <0x14822000 0x1000>;
 			reg-names = "decon", "idma";
+			status = "disabled";
+		};
+
+		/* [D] serial_0: uart@13810000 (UART_BTWIFIFM, 4 wires with flow control), SPI 422, 256-byte FIFO; Bluetooth HCI */
+		serial_bt: serial@13810000 {
+			compatible = "samsung,exynos7870-uart",
+				     "samsung,exynos8895-uart";
+			reg = <0x13810000 0x100>;
+			interrupts = <GIC_SPI 422 IRQ_TYPE_LEVEL_HIGH>;
+			clock-names = "uart", "clk_uart_baud0";
+			clocks = <&clk_peri_uart_bt_pclk>, <&clk_peri_uart_bt_uclk>;
+			samsung,uart-fifosize = <256>;
 			status = "disabled";
 		};
 

@@ -572,3 +572,38 @@
 		enable-gpios = <&gpd2 3 GPIO_ACTIVE_HIGH>;
 	};
 };
+
+/*
+ * Bluetooth (EVIDENCE 62/63): QCA9377 HCI over UART_BTWIFIFM (0x13810000, gpb0-0..3 = RXD, TXD, CTS, RTS, function 2),
+ * BT_EN gpd4-2 (active high), BT_WAKE gpd5-1 and BT_HOST_WAKE gpa1-6 left unused for now. The chip is powered with the
+ * Wi-Fi supply cnss_dcdc_en (gpd3-3), which stays on while the Wi-Fi card is bound.
+ */
+&pinctrl_top {
+	bt_uart_bus: bt-uart-bus-pins {
+		samsung,pins = "gpb0-0", "gpb0-1", "gpb0-2", "gpb0-3";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+
+	bt_en_pin: bt-en-pins {
+		samsung,pins = "gpd4-2";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5433_PIN_DRV_FAST_SR1>;
+	};
+};
+
+&serial_bt {
+	pinctrl-names = "default";
+	pinctrl-0 = <&bt_uart_bus>;
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,qca6174-bt";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_en_pin>;
+		enable-gpios = <&gpd4 2 GPIO_ACTIVE_HIGH>;
+		max-speed = <3000000>;
+	};
+};
