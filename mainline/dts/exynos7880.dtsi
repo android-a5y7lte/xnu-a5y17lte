@@ -30,6 +30,8 @@
 		pinctrl4 = &pinctrl_fsys;
 		pinctrl5 = &pinctrl_nfc;
 		pinctrl6 = &pinctrl_top;
+		/* s3c64xx-spi wants a bus number (the vendor SENSORHUB bus is SPI2): /dev/spidev2.0 */
+		spi2 = &spi_2;
 	};
 
 	cpus {

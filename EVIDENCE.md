@@ -3119,3 +3119,9 @@ Jimmy allowed reading the vendor sensor-hub driver read-only (Timeshift copy, `d
   headers and the five GPIOs (reset gpf4-2, boot0 gpd2-0, ap_int gpd1-5 outputs; mcu_int1 gpa0-7, mcu_int2 gpa2-5 inputs); the binary is pushed to the phone's RAM (/tmp) only.
 - **Test plan:** flash m13a (Jimmy's OK, TWRP), boot, check `ls /dev/spidev0.0` and dmesg for the SPI driver, push the probe, run it once without and once with `reset`. If WHOAMI answers 0x55 the transport is right.
   Risks: the MCU may be silent without the AP's full start-up (an MCU reset notice, then the AP initialization), the handshake polarity may differ from my reading, and a wrong GPIO pull could confuse the MCU (it recovers with a reset).
+
+## 73. m13a SPI probe failed: missing alias; m13b (2026-11-02)
+
+m13a (sha256 `fca3f4a7…ccf7bca`) was flashed and read back, booted on Wi-Fi: `s3c64xx-spi 13930000.spi: error -19: Failed to get alias id`, so no SPI bus and no `/dev/spidev*`. The driver takes its bus number from an `aliases` entry.
+- Fix in `exynos7880.dtsi`: `spi2 = &spi_2;` (the device is then `/dev/spidev2.0`; the probe tool now opens that path). m13b: `DECON=1 MILESTONE=m13b ./build-mainline.sh`, sha256 `f5783a93…dd1264`, 16097296 B, same module set as m12b/m13a.
+- The probe binary was already pushed to the phone's /tmp (RAM); it has to be pushed again for the new path.

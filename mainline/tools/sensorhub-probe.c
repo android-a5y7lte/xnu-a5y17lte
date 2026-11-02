@@ -198,9 +198,9 @@ int main(int argc, char **argv)
 	if (open_line(&L_BOOT0, 0) || open_line(&L_APINT, 1) || open_line(&L_RST, 1) ||
 	    open_line(&L_INT1, 0) || open_line(&L_INT2, 0))
 		return 1;
-	spi_fd = open("/dev/spidev0.0", O_RDWR);
+	spi_fd = open("/dev/spidev2.0", O_RDWR);
 	if (spi_fd < 0) {
-		perror("/dev/spidev0.0");
+		perror("/dev/spidev2.0");
 		return 1;
 	}
 	if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) || ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) ||
