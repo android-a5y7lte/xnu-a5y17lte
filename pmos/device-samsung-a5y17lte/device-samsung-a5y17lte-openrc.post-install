@@ -8,6 +8,9 @@ rc-update -q add swclock boot
 # pmOS ships has no resolver behind it under OpenRC)
 rc-update -q add a5y17lte-usbnet default
 rc-update -q add a5y17lte-keyled default
+# Bluetooth (EVIDENCE 64-66): bluez, and the service that redoes the chip setup after the rootfs is up
+rc-update -q add bluetooth default
+rc-update -q add a5y17lte-btfw default
 if grep -q '^nameserver 127\.0\.0\.53' /etc/resolv.conf 2>/dev/null; then
 	printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' > /etc/resolv.conf
 fi

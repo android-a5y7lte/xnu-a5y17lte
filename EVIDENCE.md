@@ -3052,3 +3052,12 @@ m12b (sha256 `10b9303b…990e4b`) flashed from TWRP and read back; the new `cfg8
 Jimmy's own phone (A55) was already paired with the A5 (pairing done by Jimmy earlier, from the A55 or Phosh). `bluetoothctl info` on the A5: Paired yes, Bonded yes, Trusted yes, Connected yes; a new `pair` returned
 `org.bluez.Error.AlreadyExists`. So pairing, bonding and the encrypted ACL link work through the UART HCI path on m12b. Not tested: audio profiles (the A5 has no audio driver yet), file transfer, reconnect after reboot,
 the Phosh Bluetooth switch. The pairing keys live in `/var/lib/bluetooth` on SYSTEM.
+
+## 68. Bluetooth packaged for the rootfs build (2026-11-02), build NOT run
+
+- Device package `device-samsung-a5y17lte` 3-r11: depends `linux-firmware-qca` and `bluez`; the openrc subpackage depends `bluez-openrc`, installs `a5y17lte-btfw.initd` as `/etc/init.d/a5y17lte-btfw`; the post-install and
+  post-upgrade scripts add `bluetooth` and `a5y17lte-btfw` to the default runlevel; `build-pmos.sh` also checks those two services are in the image's default runlevel (the same ordering trap as the others).
+- Kernel package `linux-postmarketos-exynos7880` 7-r5: lists patches 0012-0016 (battery and charger; `build-pmos.sh` refuses to run when a patch is missing from the APKBUILD, so the previous 7-r4 could not be built any more). Its kernel `.config` (RFKILL, BT, SERIAL_SAMSUNG,
+  battery) and the DT (UART, regulator-boot-on) come from the same files as the boot image, so the packaged `cfg80211.ko` is the rfkill one (sha `62f40ac2…187b23`, to be verified in the built image).
+- Not done: the `./build-pmos.sh` run itself (needs sudo, long), so nothing is built or flashed. The package DT does not switch the display driver on (`&decon` is only added by `DECON=1` in build-mainline.sh), the same as before.
+  Pending for the rootfs rebuild: the CMA modules for the display driver, the hand-installed extras still on the phone (python tools, etc.), brightness persistence.
