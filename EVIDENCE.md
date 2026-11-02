@@ -3151,3 +3151,13 @@ reset high, boot0 low again after 1 ms, 30 ms wait, then sync byte 0x5a and poll
 - So far: the MCU reacts to `ap_int` (mcu_int2 follows it, so the application is running and powered) and sent one plausible AP2HUB_READY header once, but every other read looks like a floating or mis-sampled MISO line. Suspects, in this order: MOSI/SCK vs MISO pad configuration
   or pull (the vendor MISO pad has pull-down in sleep, pud 0 active), the SPI controller's data sampling (feedback clock delay, the `swap-mode` and DMA mode of the vendor DT, `spi-src-clk`), the chip-select timing (the vendor driver uses a GPIO CS with the controller in manual mode),
   a missing MCU supply or pull-up that S-Boot does not set, and a protocol step I have not seen (time sync / reset notice). Needs a logic analyser or the MCU's reaction to a known pattern to go further; blind probing is slow.
+
+## 76. Packaged rootfs written to SYSTEM from TWRP (2026-11-03), NOT yet booted
+
+With Jimmy's OK (phone in TWRP, battery 99 %, SYSTEM not mounted): `build/pmos/samsung-a5y17lte-root.img` (1781530624 B, sha256 `b9a0598e…4b355`, device package 3-r11, kernel package 7-r5, EVIDENCE 68/69)
+streamed with `adb exec-in "dd of=<by-name>/SYSTEM bs=4M conv=fsync"` (8 min 25 s), then the first 1781530624 B pulled back with `adb exec-out dd` (slower than the write, over 10 minutes).
+- **Pull-back sha256 `f0357b79…e14d4a0` differs from the image's**, but the difference is confined to the last 240 blocks (4 KiB blocks 434704 to 434943, 918261 differing bytes): everything before byte 1780547584 is identical (`cmp -n`), the image's last 240 blocks are all zero
+  and `debugfs testb` says all 240 are "not in use" in the image, so what the partition holds there is stale data from the previous SYSTEM contents (the zero tail was not written over it, as already seen in EVIDENCE 33). `e2fsck -fn` on the pull-back is clean (22932 files, 370063/434944 blocks, same as the image).
+  So the write is good for everything the filesystem uses.
+- Not done yet (Jimmy wants to watch the first boot): reboot into the new System, grow the filesystem to the full partition with `ext4-grow` (EVIDENCE 25), reboot test, enter the Wi-Fi password in Phosh again and re-pair the A55. BOOT is m13b (sensor-hub SPI test image; the packaged rootfs has the same 11 modules). The phone was left in TWRP.
+- Fallbacks if the new System does not come up: write `~/a5-backup/SYSTEM-p19-pmos-m5c.img` back the same way (console-only M5c rootfs), or rebuild with `./build-pmos.sh`.
