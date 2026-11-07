@@ -186,12 +186,16 @@ EVIDENCE.md (every hardware finding, in order) before changing anything.
   (icon, charging state, percentage, temperature, energy and time estimates from a `simple-battery` DT node: 3000 mAh, 4.35 V). The charger input limit stays at the USB
   default 500 mA (slow charging, ~10 h from empty): raising it per cable type needs cable detection (the MUIC type registers read 0 after the boot-time manual MUIC
   switch), still open and not safe to guess. Not verified: the unplug/replug transition. Battery was at ~1 % (3.5 V) when last seen: keep the phone charging.
-- NEXT (updated 2026-11-01): the phone is POWERED OFF and must charge overnight (it was NOT actually charging during the earlier
-  wait; battery probably still ~0 %). Do not flash, boot or run cable tests until Jimmy says it is charged (> ~30 %). BOOT = m11b.
-  First test then: flash m11c (needs Jimmy's OK + TWRP), boot on PC USB and read `dmesg | grep 'a5-diag: muic'`, then boot with a
-  wall charger and no PC (SSH over Wi-Fi) and compare; if the cable type differs, add a service raising the charger input limit.
-  Other open items: brightness persistence, full rootfs rebuild (./build-pmos.sh, SYSTEM write needs OK), real panel
-  control (regulators, PCD pad, D-PHY reset), GPU, audio, Bluetooth, sensors, Wi-Fi leftovers (MAC, board data, host-wake).
+- STATE (2026-11-07, end of day): BOOT = m14f (display, battery, Wi-Fi, Bluetooth, sensor-hub SPI test node, audio DMA/I2S/card; no DYNAMIC_DEBUG), SYSTEM = the packaged rootfs
+  (device pkg 3-r11, kernel pkg 7-r7, Bluetooth + alsa-utils + pipewire-spa-bluez/-pulse/-tools hand-installed on top, not yet in the packages), Wi-Fi and Bluetooth work. Fallback BOOT images in git: m14c (no reset driver), m13b, m12b.
+  `~/a5-backup` no longer exists (SYSTEM/EFS backups gone; the old rollback note does not work), rollback = rebuild with ./build-pmos.sh.
+- AUDIO (EVIDENCE 80-98): the earpiece plays a tone: PipeWire -> card "A5-Test" (simple-audio-card, I2S0, dummy S/PDIF codec) -> PL330 (patches 0017-0020, reset controller for the audio blocks) -> mixer S1402X -> codec COD3026x (7-bit 0x04
+  on i2c-1). The mixer routing, codec power sequences and the PMU pad-retention release are still userspace scripts (mainline/tools/audio-test.sh + codec-seq, pmu-aud-pad; run as root, tools pushed to /tmp, gone at every reboot; PipeWire keeps the ALSA device
+  open, so play through PipeWire/paplay; one sudo per ssh command). The loudspeaker is an NXP TFA9896 amplifier (I2C bus gpc9-0 SDA / gpc9-1 SCL, 0x34, ID 0x1b96): it powers up and sees the I2S clocks, but stays silent until its DSP is started
+  (container /vendor/etc/Tfa9896.cnt in the Timeshift copy of hadk; NXP's open driver would be the reference). No sound drivers for mixer/codec yet.
+- HANG RISKS (audio work froze the phone twice): never read or write an audio block while its reset bit is held (DISPAUD_CFG 0x148f1000), never poll the PL330 registers during playback; recovery = force power off, then the TWRP route (memory note).
+- NEXT: (1) real drivers for the mixer and the COD3026x codec (earpiece/headphones first) plus a proper sound card and the 512 x fs I2S clock, (2) put the hand-installed packages, the pad release and the audio setup in the device package, (3) the TFA9896 start for the loudspeaker,
+  (4) the sensor hub (SPI answers only junk, EVIDENCE 74/75), real panel brightness/AOD (panel commands do nothing yet), GPU, haptics (parked), brightness persistence, Bluetooth leftovers (wake lines, real address), a rootfs rebuild once more is in.
 
 ## Roadmap after M5 (Jimmy, 2026-10-19)
 Two OSes on ONE mainline kernel + DT: Nura/postmarketOS (primary, on SYSTEM)
