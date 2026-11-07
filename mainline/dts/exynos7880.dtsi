@@ -27,6 +27,7 @@
 		/* index into exynos7880_pin_ctrl[] (Linux pinctrl-exynos-arm64.c) */
 		pinctrl0 = &pinctrl_alive;
 		pinctrl1 = &pinctrl_ccore;
+		pinctrl2 = &pinctrl_dispaud;
 		pinctrl4 = &pinctrl_fsys;
 		pinctrl5 = &pinctrl_nfc;
 		pinctrl6 = &pinctrl_top;
@@ -214,6 +215,24 @@
 		clock-output-names = "peri_spi2_src_fixed";
 	};
 
+	/*
+	 * TEMPORARY: audio subsystem clocks (EVIDENCE 82), no DISPAUD clock driver yet. S-Boot leaves AUD_PLL running at 98.304 MHz
+	 * (M 30, P 1, S 3, K 16213), the MI2S mux on AUD_PLL with divider 1 and the I2S/mixer/APB gates open.
+	 */
+	clk_dispaud_apb: clock-dispaud-apb {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <98304000>;
+		clock-output-names = "dispaud_apb_fixed";
+	};
+
+	clk_dispaud_mi2s: clock-dispaud-mi2s {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <98304000>;
+		clock-output-names = "dispaud_mi2s_fixed";
+	};
+
 	/* [D] psci: method smc, cpu_suspend 0xC4000001 (same IDs as [M]) */
 	psci {
 		compatible = "arm,psci";
@@ -328,6 +347,43 @@
 			num-cs = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		/* [D] pinctrl_2: pinctrl@148C0000 (DISPAUD: gpz0-gpz2, the audio I2S pins), SPI 68 */
+		pinctrl_dispaud: pinctrl@148c0000 {
+			compatible = "samsung,exynos7880-pinctrl";
+			reg = <0x148c0000 0x1000>;
+			interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/*
+		 * [D] adma@14890000: ARM PL330 inside the audio subsystem (4 channels, 16 requests, SPI 73); the ID registers read 0 by
+		 * design, hence the peripheral id override (the vendor DT does the same). Reset bit 3 of DISPAUD_CFG (0x148f1000) is
+		 * released by S-Boot: never touch it while reading the block (EVIDENCE 84).
+		 */
+		adma: dma-controller@14890000 {
+			compatible = "arm,pl330", "arm,primecell";
+			reg = <0x14890000 0x1000>;
+			interrupts = <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_dispaud_apb>;
+			clock-names = "apb_pclk";
+			#dma-cells = <1>;
+			#dma-channels = <4>;
+			#dma-requests = <16>;
+			arm,primecell-periphid = <0x00341330>;
+		};
+
+		/* [D] i2s0: i2s@148a0000, SPI 69, tx/rx on adma 0/2; the vendor block is "samsung,i2s-v5", mainline's Exynos7 driver is the nearest match (to be checked) */
+		i2s0: i2s@148a0000 {
+			compatible = "samsung,exynos7-i2s";
+			reg = <0x148a0000 0x100>;
+			interrupts = <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>;
+			dmas = <&adma 0>, <&adma 2>;
+			dma-names = "tx", "rx";
+			clocks = <&clk_dispaud_apb>, <&clk_dispaud_mi2s>, <&clk_dispaud_mi2s>;
+			clock-names = "iis", "i2s_opclk0", "i2s_opclk1";
+			#sound-dai-cells = <1>;
 			status = "disabled";
 		};
 

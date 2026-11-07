@@ -652,3 +652,30 @@
 		spi-cpha;
 	};
 };
+
+/*
+ * Audio (EVIDENCE 80-84): SoC I2S0 to the audio mixer (0x14880000) and the COD3026x codec (7-bit address 0x04 on the PMIC bus).
+ * Pins from the vendor DT: i2s_pmic_bus gpz1-0..4 (function 2, pud 1 = pull-down), i2s_amp_bus gpz1-5 (function 2, pud 3 = pull-up, drive 2).
+ * Test image only: the I2S node is enabled to see whether the mainline driver and the PL330 probe; there is no sound card yet.
+ */
+&pinctrl_dispaud {
+	i2s_codec_bus: i2s-codec-bus-pins {
+		samsung,pins = "gpz1-0", "gpz1-1", "gpz1-2", "gpz1-3", "gpz1-4";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_DOWN>;
+		samsung,pin-drv = <0>;
+	};
+
+	i2s_amp_bus: i2s-amp-bus-pins {
+		samsung,pins = "gpz1-5";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
+		samsung,pin-drv = <2>;
+	};
+};
+
+&i2s0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s_codec_bus &i2s_amp_bus>;
+	status = "okay";
+};
