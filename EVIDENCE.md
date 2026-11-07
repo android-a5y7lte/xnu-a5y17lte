@@ -3170,3 +3170,17 @@ The rootfs of EVIDENCE 76 booted on m13b (BOOT unchanged) with Jimmy watching: N
   `cfg80211.ko`/`mac80211.ko` (not byte-identical to the boot-image build, EVIDENCE 69) load and Wi-Fi works; Phosh running, backlight `exynos7880-decon` present.
 - **`sudo reboot` test passed:** the phone came back, `/` still 4.6G, Wi-Fi reconnected by itself, `bluetooth` and `a5y17lte-btfw` started on their own; the first Bluetooth setup at 0.77 s still fails for lack of firmware (the rootfs is not mounted yet) and the service redoes it at ~21.7 s (completed).
 - The A55 pairing is gone, as expected (new SYSTEM): re-pairing is still to do. The packaged rootfs is now the base on SYSTEM; the earlier hand-installed extras (python tools, brightness helper files, the cfg80211 swap) are not on it unless they are in the packages.
+
+## 78. Audio: survey (2026-11-07, investigation only, no code, nothing flashed)
+
+From the vendor DT reference (`upstream/k7880`, `exynos7880-a5y17lte_common.dtsi`) and our tree:
+- **Codec:** `cod3026x@04` (`codec,cod3026x`, 10-bit I2C address 0x04) on the same HS-I2C bus as the PMIC S2MPU05 (0x66; on this board that is the bit-banged bus gpm0-0/1 we already use), supply `ldo25_reg`, interrupt gpa0-4 (`cod3026_irq`),
+  headset detection through the SoC ADC channel 2 (`io-channels = <&exynos_adc 2>`, button zones: send/end 226 (range 0-217), google 582, volume up 115, volume down 114), mic bias settings, water-detect thresholds.
+- **SoC side:** `i2s0` at 0x148a0000 (primary/secondary, codec), `i2s1` at 0x148b0000 ("AMP for AP"), `s1402x@14880000` (the audio subsystem block with the pin states for the codec/PMIC bus `i2s_pmic_bus` gpz1-0..4, the amp bus `i2s_amp_bus` gpz1-5, BT and FM buses),
+  "dummy" DAIs for the CP (modem), BT and FM paths, and `eax` (Samsung's offload engine); the sound card is Samsung's `samsung,universal7880-cod3026x` machine driver. The DT shows no separate speaker-amp chip, so the speaker driver is probably inside the codec (to confirm).
+- **Mainline:** `sound/soc/samsung/i2s.c` already handles `samsung,exynos7-i2s` and `samsung,exynos7-i2s1`; there is no `cod3026x` codec driver, no 7870/7880 sound machine/audio-subsystem driver, and our kernel has `CONFIG_SND` off (the phone has no `/proc/asound`). The audio clocks come from CMU_AUD (not described yet, the same
+  fixed-clock approach as for the UART and SPI would do for a first test, rates from the vendor pwrcal in `upstream/k7880`).
+- **What it needs:** (1) an I2C probe of the codec at 10-bit address 0x04 on the gpm0 bus to see whether it answers and what its ID register says (read-only), (2) its register map and the speaker/headphone/mic paths (only the vendor codec driver documents them),
+  (3) the i2s/audio-subsystem bring-up (clocks, `s1402x`, DMA), (4) a DT sound card (simple-audio-card or a small machine driver) and ALSA mixer paths for PipeWire.
+- **Blocked on a permission:** reading the vendor audio sources (Timeshift copy: `sound/soc/codecs/cod3026x*`, `sound/soc/samsung/` machine driver and the `s1402x`/audio-subsystem pieces) is not covered by what Jimmy allowed so far.
+- **Meanwhile, no codec needed:** the phone's Bluetooth (EVIDENCE 64-77) can carry audio to a Bluetooth speaker or headset (A2DP) through PipeWire/WirePlumber, which are installed (`pipewire`, `wireplumber`, `pulseaudio-bluez`); needs a speaker to test with.
