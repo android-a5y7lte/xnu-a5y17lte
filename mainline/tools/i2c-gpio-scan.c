@@ -1,4 +1,5 @@
 /*
+ * i2c-gpio-scan write BANK SDA SCL ADDR REG VALUE16   write one 16-bit register (the only write operation).
  * i2c-gpio-scan BANK SDA SCL ADDR REG [N]   read N bytes (default 2) from register REG of device ADDR (reads only).
  * i2c-gpio-scan BANK LINE_A LINE_B   scan an I2C bus bit-banged on two GPIO lines of one bank (GPIO character device v2, open drain with
  * read-back, about 10 kHz), once with A = SDA / B = SCL and once swapped, and print the 7-bit addresses (0x08-0x77) that acknowledge a write address
@@ -151,6 +152,22 @@ static void readregs(const char *bank, int a, int b, unsigned int addr, unsigned
 	close(scl_fd);
 }
 
+/* write one 16-bit register (big endian) of an amplifier-style device: address, register, high byte, low byte */
+static void writereg16(const char *bank, int a, int b, unsigned int addr, unsigned int reg, unsigned int val)
+{
+	sda_fd = req(bank, a, "sda");
+	scl_fd = req(bank, b, "scl");
+	SDA(1); SCL(1); D();
+	start();
+	if (!wbyte(addr << 1) || !wbyte(reg) || !wbyte(val >> 8) || !wbyte(val & 0xff))
+		printf("write 0x%02x reg 0x%02x: missing ACK\n", addr, reg);
+	else
+		printf("wrote 0x%02x reg 0x%02x <- 0x%04x\n", addr, reg, val);
+	stop();
+	close(sda_fd);
+	close(scl_fd);
+}
+
 static void scan(const char *bank, int a, int b)
 {
 	unsigned int addr;
@@ -175,9 +192,14 @@ static void scan(const char *bank, int a, int b)
 
 int main(int argc, char **argv)
 {
-	if (argc < 4) {
+	if (argc < 4 || (argc >= 7 && !strcmp(argv[1], "write") && argc < 8)) {
 		fprintf(stderr, "usage: %s BANK LINE_A LINE_B\n", argv[0]);
 		return 2;
+	}
+	if (argc >= 7 && !strcmp(argv[1], "write")) {	/* write BANK SDA SCL ADDR REG VALUE16 */
+		writereg16(argv[2], atoi(argv[3]), atoi(argv[4]), strtoul(argv[5], NULL, 0), strtoul(argv[6], NULL, 0),
+			   strtoul(argv[7], NULL, 0));
+		return 0;
 	}
 	if (argc >= 6) {	/* BANK SDA SCL ADDR REG [N]: read registers with A = SDA, B = SCL as given */
 		readregs(argv[1], atoi(argv[2]), atoi(argv[3]), strtoul(argv[4], NULL, 0), strtoul(argv[5], NULL, 0),
