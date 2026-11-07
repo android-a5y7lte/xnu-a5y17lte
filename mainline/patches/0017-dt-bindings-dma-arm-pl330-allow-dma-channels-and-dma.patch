@@ -1,0 +1,45 @@
+From d8382aed7c4ae1865ef5ef7f4e08ab80fb2fbbaf Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 7 Nov 2026 21:12:27 +0200
+Subject: [PATCH 17/18] dt-bindings: dma: arm,pl330: allow dma-channels and
+ dma-requests
+
+The PL330 found in the audio subsystem of the Exynos7880 reads all of its
+configuration registers as zero, so the driver cannot tell the number of
+channels and of peripheral request lines. Allow the common dma-channels
+and dma-requests properties to give them.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ .../devicetree/bindings/dma/arm,pl330.yaml        | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/dma/arm,pl330.yaml b/Documentation/devicetree/bindings/dma/arm,pl330.yaml
+index 4a3dd6f53..acd58a478 100644
+--- a/Documentation/devicetree/bindings/dma/arm,pl330.yaml
++++ b/Documentation/devicetree/bindings/dma/arm,pl330.yaml
+@@ -53,6 +53,21 @@ properties:
+     type: boolean
+     description: quirk for performing burst transfer only
+ 
++  dma-channels:
++    minimum: 1
++    maximum: 8
++    description:
++      Number of channels, for integrations whose configuration registers
++      read as zero. Overrides the value read from the controller.
++
++  dma-requests:
++    minimum: 1
++    maximum: 32
++    description:
++      Number of peripheral request signals, for integrations whose
++      configuration registers read as zero. Overrides the value read from
++      the controller.
++
+   dma-coherent: true
+ 
+   iommus:
+-- 
+2.43.0
+

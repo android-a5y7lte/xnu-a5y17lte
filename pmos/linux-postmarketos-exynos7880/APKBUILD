@@ -7,7 +7,7 @@
 maintainer="Jimmy <fakeandroit@gmail.com>"
 pkgname=linux-postmarketos-exynos7880
 pkgver=7.2
-pkgrel=5
+pkgrel=6
 pkgdesc="Mainline kernel for Samsung Exynos 7880 devices (Galaxy A5 2017)"
 arch="aarch64"
 _carch="arm64"
@@ -50,6 +50,8 @@ source="
 	0014-power-supply-s2mu005-battery-report-the-battery-desc.patch
 	0015-dt-bindings-power-supply-add-the-Samsung-S2MU004-cha.patch
 	0016-power-supply-add-the-Samsung-S2MU004-charger-status-.patch
+	0017-dt-bindings-dma-arm-pl330-allow-dma-channels-and-dma.patch
+	0018-dmaengine-pl330-take-the-channel-and-request-counts-.patch
 	exynos7880.dtsi
 	exynos7880-pinctrl.dtsi
 	exynos7880-a5y17lte.dts

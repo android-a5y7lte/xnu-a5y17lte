@@ -369,8 +369,8 @@
 			clocks = <&clk_dispaud_apb>;
 			clock-names = "apb_pclk";
 			#dma-cells = <1>;
-			#dma-channels = <4>;
-			#dma-requests = <16>;
+			dma-channels = <4>;
+			dma-requests = <16>;
 			arm,primecell-periphid = <0x00341330>;
 		};
 

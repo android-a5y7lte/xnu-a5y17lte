@@ -1,0 +1,63 @@
+From 20b7fcef3f00dd42850dd0a5400643f272450fc5 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 7 Nov 2026 21:12:27 +0200
+Subject: [PATCH 18/18] dmaengine: pl330: take the channel and request counts
+ from the device tree
+
+On the Exynos7880 audio subsystem the PL330 configuration registers read
+as zero, so the driver ends up with one channel, one event and no
+peripheral request line and refuses every slave request. Read
+dma-channels and dma-requests from the device tree when they are given,
+and make sure there is one event per channel.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ drivers/dma/pl330.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/drivers/dma/pl330.c b/drivers/dma/pl330.c
+index 25ba84b18..4fa4e482c 100644
+--- a/drivers/dma/pl330.c
++++ b/drivers/dma/pl330.c
+@@ -1822,6 +1822,7 @@ static void pl330_release_channel(struct pl330_thread *thrd)
+ static void read_dmac_config(struct pl330_dmac *pl330)
+ {
+ 	void __iomem *regs = pl330->base;
++	struct device_node *np;
+ 	u32 val;
+ 
+ 	val = readl(regs + CRD) >> CRD_DATA_WIDTH_SHIFT;
+@@ -1859,6 +1860,30 @@ static void read_dmac_config(struct pl330_dmac *pl330)
+ 	pl330->pcfg.num_events = val;
+ 
+ 	pl330->pcfg.irq_ns = readl(regs + CR3);
++
++	/*
++	 * Some integrations leave the configuration registers unwired, they
++	 * read as zero and the driver would see one channel and no request
++	 * line. Let the device tree give the numbers.
++	 */
++	np = pl330->ddma.dev->of_node;
++	if (np) {
++		bool override = false;
++
++		if (!of_property_read_u32(np, "dma-channels", &val) &&
++		    val >= 1 && val <= CR0_NUM_CHANS_MASK + 1) {
++			pl330->pcfg.num_chan = val;
++			override = true;
++		}
++		if (!of_property_read_u32(np, "dma-requests", &val) &&
++		    val <= CR0_NUM_PERIPH_MASK + 1) {
++			pl330->pcfg.num_peri = val;
++			override = true;
++		}
++		/* every channel uses the event of its own number */
++		if (override && pl330->pcfg.num_events < pl330->pcfg.num_chan)
++			pl330->pcfg.num_events = pl330->pcfg.num_chan;
++	}
+ }
+ 
+ static inline void _reset_thread(struct pl330_thread *thrd)
+-- 
+2.43.0
+
