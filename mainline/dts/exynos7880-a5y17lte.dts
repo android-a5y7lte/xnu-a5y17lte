@@ -679,3 +679,32 @@
 	pinctrl-0 = <&i2s_codec_bus &i2s_amp_bus>;
 	status = "okay";
 };
+
+/*
+ * First sound card for the playback test (EVIDENCE 89): I2S0 as the clock master (bit clock, frame clock and the codec's master
+ * clock at 512 x fs) with a dummy codec; the real mixer (0x14880000) and the COD3026x (7-bit 0x04 on i2c-1) are configured from
+ * userspace by tools/audio-test until their drivers exist.
+ */
+/ {
+	dummy_codec: dummy-codec {
+		compatible = "linux,spdif-dit";
+		#sound-dai-cells = <0>;
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "A5-Test";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,mclk-fs = <512>;
+		simple-audio-card,bitclock-master = <&snd_cpu>;
+		simple-audio-card,frame-master = <&snd_cpu>;
+
+		snd_cpu: simple-audio-card,cpu {
+			sound-dai = <&i2s0 0>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&dummy_codec>;
+		};
+	};
+};
