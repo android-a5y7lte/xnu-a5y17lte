@@ -357,6 +357,13 @@
 			interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
+		/* [D] the audio subsystem's software resets (SFR "DISPAUD_CFG"): mixer 0, I2S 1, amplifier 2, ADMA 3 */
+		lpass_rst: reset-controller@148f1000 {
+			compatible = "samsung,exynos7880-lpass-reset";
+			reg = <0x148f1000 0x4>;
+			#reset-cells = <1>;
+		};
+
 		/*
 		 * [D] adma@14890000: ARM PL330 inside the audio subsystem (4 channels, 16 requests, SPI 73); the ID registers read 0 by
 		 * design, hence the peripheral id override (the vendor DT does the same). Reset bit 3 of DISPAUD_CFG (0x148f1000) is
@@ -368,6 +375,8 @@
 			interrupts = <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clk_dispaud_apb>;
 			clock-names = "apb_pclk";
+			resets = <&lpass_rst 3>;
+			reset-names = "dma";
 			#dma-cells = <1>;
 			dma-channels = <4>;
 			dma-requests = <16>;

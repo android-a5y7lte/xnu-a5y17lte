@@ -1,0 +1,183 @@
+From 7597a4b2c42a3a818f5c6c8a0eba2c74e5e5a43e Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Sat, 7 Nov 2026 22:12:02 +0200
+Subject: [PATCH 20/20] reset: add a driver for the Exynos7880 audio subsystem
+ resets
+
+The audio mixer, I2S, amplifier interface and DMA controller of the
+Exynos7880 audio subsystem do not work after boot until they have been
+reset once, with the reset held for a short while. The PL330 of the audio
+DMA reads all of its registers as zero and ignores writes before that.
+Provide the four reset bits as a reset controller whose deassert pulses
+the bit first, so that the PL330 driver, which deasserts its reset before
+it reads the configuration, gets a working block.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ drivers/reset/Kconfig                  |  11 +++
+ drivers/reset/Makefile                 |   1 +
+ drivers/reset/reset-exynos7880-lpass.c | 118 +++++++++++++++++++++++++
+ 3 files changed, 130 insertions(+)
+ create mode 100644 drivers/reset/reset-exynos7880-lpass.c
+
+diff --git a/drivers/reset/Kconfig b/drivers/reset/Kconfig
+index d009eb084..d842ff2c7 100644
+--- a/drivers/reset/Kconfig
++++ b/drivers/reset/Kconfig
+@@ -274,6 +274,17 @@ config RESET_SCMI
+ 	  This driver uses SCMI Message Protocol to interact with the
+ 	  firmware controlling all the reset signals.
+ 
++config RESET_EXYNOS7880_LPASS
++	bool "Exynos7880 audio subsystem reset controller" if COMPILE_TEST
++	default ARCH_EXYNOS
++	depends on HAS_IOMEM
++	help
++	  This enables the reset controller for the software reset bits of
++	  the audio subsystem of the Exynos7880: audio mixer, I2S, amplifier
++	  interface and audio DMA controller. These blocks do not work after
++	  boot until they have been reset once, which the audio DMA driver
++	  does through this controller.
++
+ config RESET_SIMPLE
+ 	bool "Simple Reset Controller Driver" if COMPILE_TEST || EXPERT
+ 	default ARCH_ASPEED || ARCH_BCMBCA || ARCH_BITMAIN || ARCH_REALTEK || ARCH_SOPHGO || ARCH_STM32 || (ARCH_INTEL_SOCFPGA && ARM64) || ARCH_SUNXI || ARC
+diff --git a/drivers/reset/Makefile b/drivers/reset/Makefile
+index 3e52569bd..0cc962f6c 100644
+--- a/drivers/reset/Makefile
++++ b/drivers/reset/Makefile
+@@ -37,6 +37,7 @@ obj-$(CONFIG_RESET_RASPBERRYPI) += reset-raspberrypi.o
+ obj-$(CONFIG_RESET_RZG2L_USBPHY_CTRL) += reset-rzg2l-usbphy-ctrl.o
+ obj-$(CONFIG_RESET_RZV2H_USB2PHY) += reset-rzv2h-usb2phy.o
+ obj-$(CONFIG_RESET_SCMI) += reset-scmi.o
++obj-$(CONFIG_RESET_EXYNOS7880_LPASS) += reset-exynos7880-lpass.o
+ obj-$(CONFIG_RESET_SIMPLE) += reset-simple.o
+ obj-$(CONFIG_RESET_SKY1) += reset-sky1.o
+ obj-$(CONFIG_RESET_SOCFPGA) += reset-socfpga.o
+diff --git a/drivers/reset/reset-exynos7880-lpass.c b/drivers/reset/reset-exynos7880-lpass.c
+new file mode 100644
+index 000000000..ad2ca351e
+--- /dev/null
++++ b/drivers/reset/reset-exynos7880-lpass.c
+@@ -0,0 +1,118 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Software resets of the Exynos7880 audio subsystem
++ *
++ * The audio mixer, the I2S, the amplifier interface and the audio DMA
++ * controller each have a reset bit in one register. They do not work after
++ * boot until they have been reset once, and the reset has to be held for a
++ * short while, so deasserting a line pulses the bit first.
++ */
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/reset-controller.h>
++#include <linux/spinlock.h>
++
++#define LPASS_NUM_RESETS	4
++#define LPASS_RESET_HOLD_US	200
++#define LPASS_RESET_SETTLE_MS	10
++
++struct lpass_reset {
++	struct reset_controller_dev rcdev;
++	void __iomem *base;
++	spinlock_t lock;
++};
++
++static struct lpass_reset *to_lpass_reset(struct reset_controller_dev *rcdev)
++{
++	return container_of(rcdev, struct lpass_reset, rcdev);
++}
++
++static void lpass_reset_update(struct lpass_reset *lr, unsigned long id, bool set)
++{
++	unsigned long flags;
++	u32 val;
++
++	spin_lock_irqsave(&lr->lock, flags);
++	val = readl(lr->base);
++	if (set)
++		val |= BIT(id);
++	else
++		val &= ~BIT(id);
++	writel(val, lr->base);
++	spin_unlock_irqrestore(&lr->lock, flags);
++}
++
++static int lpass_reset_assert(struct reset_controller_dev *rcdev,
++			      unsigned long id)
++{
++	lpass_reset_update(to_lpass_reset(rcdev), id, true);
++
++	return 0;
++}
++
++static int lpass_reset_deassert(struct reset_controller_dev *rcdev,
++				unsigned long id)
++{
++	struct lpass_reset *lr = to_lpass_reset(rcdev);
++
++	/* a block that was never reset after boot needs the pulse */
++	lpass_reset_update(lr, id, true);
++	udelay(LPASS_RESET_HOLD_US);
++	lpass_reset_update(lr, id, false);
++	msleep(LPASS_RESET_SETTLE_MS);
++
++	return 0;
++}
++
++static int lpass_reset_status(struct reset_controller_dev *rcdev,
++			      unsigned long id)
++{
++	return !!(readl(to_lpass_reset(rcdev)->base) & BIT(id));
++}
++
++static const struct reset_control_ops lpass_reset_ops = {
++	.assert = lpass_reset_assert,
++	.deassert = lpass_reset_deassert,
++	.status = lpass_reset_status,
++};
++
++static int lpass_reset_probe(struct platform_device *pdev)
++{
++	struct lpass_reset *lr;
++
++	lr = devm_kzalloc(&pdev->dev, sizeof(*lr), GFP_KERNEL);
++	if (!lr)
++		return -ENOMEM;
++
++	lr->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(lr->base))
++		return PTR_ERR(lr->base);
++
++	spin_lock_init(&lr->lock);
++	lr->rcdev.owner = THIS_MODULE;
++	lr->rcdev.nr_resets = LPASS_NUM_RESETS;
++	lr->rcdev.ops = &lpass_reset_ops;
++	lr->rcdev.of_node = pdev->dev.of_node;
++
++	return devm_reset_controller_register(&pdev->dev, &lr->rcdev);
++}
++
++static const struct of_device_id lpass_reset_of_match[] = {
++	{ .compatible = "samsung,exynos7880-lpass-reset" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, lpass_reset_of_match);
++
++static struct platform_driver lpass_reset_driver = {
++	.probe = lpass_reset_probe,
++	.driver = {
++		.name = "exynos7880-lpass-reset",
++		.of_match_table = lpass_reset_of_match,
++	},
++};
++builtin_platform_driver(lpass_reset_driver);
++
++MODULE_DESCRIPTION("Exynos7880 audio subsystem reset controller");
++MODULE_LICENSE("GPL");
+-- 
+2.43.0
+
