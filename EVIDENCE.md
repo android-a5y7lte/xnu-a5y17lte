@@ -3246,3 +3246,12 @@ Registers from the vendor pwrcal tables (`upstream/k7880`, `S5E7880-cmusfr.h`; C
 - before: 0x1340 = 0, 0x3028 = 0. After `release` (and again 2 s later): **0x1340 = 1 (stuck), 0x3028 = 0 (bit 28 did not stick)**. The system kept running normally (uptime 54 min, no errors from the write). dmesg only shows the `i2c-1: died at extended address code` lines from the earlier 10-bit probe attempts of EVIDENCE 81.
 - Reading: bit 28 of 0x3028 behaves like a status/read-only or a write-1-when-powered bit (the vendor driver writes it only after the audio power domain `pd_dispaud` and the clocks are up), or the audio pad group is not held in the first place. The effect on the I2S pins cannot be seen from here (the audio pads gpz1-0..5 are not in our pinctrl DT, so no way to read their mux or level) — to be settled with a real I2S probe and a signal to look at, or with the pin DT.
 - The 0x1340 bit stays set until the next reboot; nothing else was changed.
+
+## 84. Audio DMA (ADMA PL330): reading it while its reset bit is set hangs the phone (2026-11-07)
+
+Before building m14a I checked that the new audio blocks can be read without a bus fault (`/dev/mem`, single reads): the PL330 ID registers (0x14890fe0-0xffc) read 0, I2S0 (0x148a0000/04) read 0, the mixer (0x14880000/04) read 0x3 / 0xc. The PL330 reading zeros is normal for this implementation: the vendor DT forces
+`arm,primecell-periphid = <0x341330>`, so the ID registers are not wired. Then I ran the vendor-style reset toggle on the ADMA by hand (set bit 3 of `DISPAUD_CFG`, 0x148f1000, read the PL330 ID registers, clear it): **the phone froze** (no ping, no SSH) as soon as the bit was set and the ADMA was read.
+- Meaning: DISPAUD_CFG bit 3 = 1 is the ADMA in reset, and an access to an AXI/APB slave that is in reset does not fault, it hangs the bus. Bit 3 = 0 (the state S-Boot leaves) is out of reset, which is why the earlier reads worked.
+- My mistake: reading the block inside the reset window. Rule from now on: never touch the bit (or read an audio block) while a reset is asserted; the vendor driver toggles the reset without reading in between.
+- Recovery: force power off (Volume Down + Power), power on; nothing was written to eMMC by this (the ext4 journal covers the unclean shutdown). The `pmu-aud-pad` write of EVIDENCE 83 is also gone after the reboot.
+- For the m14a DT this means: the PL330 node with the vendor's `arm,primecell-periphid` override is safe to probe in the S-Boot state (reset released, bit 3 = 0).
