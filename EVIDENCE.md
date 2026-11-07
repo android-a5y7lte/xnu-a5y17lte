@@ -3161,3 +3161,12 @@ streamed with `adb exec-in "dd of=<by-name>/SYSTEM bs=4M conv=fsync"` (8 min 25 
   So the write is good for everything the filesystem uses.
 - Not done yet (Jimmy wants to watch the first boot): reboot into the new System, grow the filesystem to the full partition with `ext4-grow` (EVIDENCE 25), reboot test, enter the Wi-Fi password in Phosh again and re-pair the A55. BOOT is m13b (sensor-hub SPI test image; the packaged rootfs has the same 11 modules). The phone was left in TWRP.
 - Fallbacks if the new System does not come up: write `~/a5-backup/SYSTEM-p19-pmos-m5c.img` back the same way (console-only M5c rootfs), or rebuild with `./build-pmos.sh`.
+
+## 77. Packaged rootfs booted, grown and reboot-tested (2026-11-07)
+
+The rootfs of EVIDENCE 76 booted on m13b (BOOT unchanged) with Jimmy watching: Nura edge, kernel 7.2.0-a5y17lte, `/` 1.6G at 91 % at first (the image is 1.78 GB). The SSH host keys are new, so the PC's stale `known_hosts` entries for the phone's two addresses were removed.
+- `ext4-grow / 1241088` (static binary pushed to /tmp, RAM only): "now 411846 blocks, growing to 1241088", `resizing filesystem from 434944 to 1241088 blocks`, `df`: 4.6G, 1.3G used, 3.0G free (31 %).
+- Checks before the reboot: services `a5y17lte-usbnet`, `a5y17lte-btfw`, `a5y17lte-keyled`, `bluetooth`, `greetd`, `sshd` started; hci0 set up by the btfw service (`QCA setup on UART is completed` at 22 s); `/dev/rfkill` lists phy0 and hci0, both unblocked; the packaged
+  `cfg80211.ko`/`mac80211.ko` (not byte-identical to the boot-image build, EVIDENCE 69) load and Wi-Fi works; Phosh running, backlight `exynos7880-decon` present.
+- **`sudo reboot` test passed:** the phone came back, `/` still 4.6G, Wi-Fi reconnected by itself, `bluetooth` and `a5y17lte-btfw` started on their own; the first Bluetooth setup at 0.77 s still fails for lack of firmware (the rootfs is not mounted yet) and the service redoes it at ~21.7 s (completed).
+- The A55 pairing is gone, as expected (new SYSTEM): re-pairing is still to do. The packaged rootfs is now the base on SYSTEM; the earlier hand-installed extras (python tools, brightness helper files, the cfg80211 swap) are not on it unless they are in the packages.
