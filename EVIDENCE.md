@@ -3283,3 +3283,9 @@ m14a (sha256 `7476f2e0…678766`) flashed from TWRP and read back, booted normal
 - `exynos7880.dtsi`: the `adma` node now uses the standard `dma-channels = <4>` / `dma-requests = <16>` instead of the vendor's `#dma-channels` / `#dma-requests`. Kernel package `linux-postmarketos-exynos7880` 7-r6 lists the two patches (`build-pmos.sh` refuses to run with a patch missing from the APKBUILD).
 - Image `out/a5y17lte-mainline-m14b-boot.img`, 16429072 B, sha256 `18cbf64f…1f1977` (`DECON=1 MILESTONE=m14b ./build-mainline.sh`).
 - Expected on the phone: `dma-pl330 …: DBUFF-1x1bytes Num_Chans-4 Num_Peri-16 Num_Events-4` and four DMA channels in `/sys/class/dma`. Not expected to move audio yet (no card, no mixer/codec driver; the microcode still comes from DRAM, the vendor uses the audio SRAM at 0x03002000; the controller may also be secure-only, CR0 bit 2 reads 0).
+
+## 88. m14b on the phone: the audio DMA now has 4 channels and 16 request lines (2026-11-07)
+
+m14b (sha256 `18cbf64f…1f1977`) flashed from TWRP, read back, booted normally: `dma-pl330 14890000.dma-controller: Loaded driver for PL330 DMAC-341330`, `DBUFF-1x1bytes Num_Chans-4 Num_Peri-16 Num_Events-4` (was 1 / 0 / 1), `/sys/class/dma` lists `dma0chan0` ... `dma0chan15`
+(one per request line, as the driver exposes peripherals as channels), `samsung-i2s 148a0000.i2s-sec: DMA channels sourced from device 148a0000.i2s`, `/proc/asound/cards`: no soundcards. No hang, no errors. Patches 0017/0018 work for the counts; an actual transfer has not been run yet (needs a sound card or a test client),
+so the secure-mode and microcode-in-DRAM questions of EVIDENCE 87 are still open.
