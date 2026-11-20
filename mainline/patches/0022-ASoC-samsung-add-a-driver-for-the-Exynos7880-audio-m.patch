@@ -1,0 +1,254 @@
+From d3ea677a326da10e9754fcb5f3975717d2bb0bf9 Mon Sep 17 00:00:00 2001
+From: Jimmy <fakeandroit@gmail.com>
+Date: Fri, 20 Nov 2026 23:07:20 +0200
+Subject: [PATCH 22/22] ASoC: samsung: add a driver for the Exynos7880 audio
+ mixer
+
+The audio of the I2S block of the Exynos7880 reaches the codec through a
+mixer that has to be reset, clocked and routed first, and the retention of
+the audio pads has to be released. Bring the block up for the one path that
+is needed for playback, 48 kHz 16 bit stereo from the I2S input to the
+codec output.
+
+Assisted-by: Claude:claude-sonnet-5-5
+---
+ sound/soc/samsung/Kconfig               |  11 ++
+ sound/soc/samsung/Makefile              |   3 +
+ sound/soc/samsung/exynos7880-audmixer.c | 192 ++++++++++++++++++++++++
+ 3 files changed, 206 insertions(+)
+ create mode 100644 sound/soc/samsung/exynos7880-audmixer.c
+
+diff --git a/sound/soc/samsung/Kconfig b/sound/soc/samsung/Kconfig
+index ec7204f57..13874e4e5 100644
+--- a/sound/soc/samsung/Kconfig
++++ b/sound/soc/samsung/Kconfig
+@@ -21,6 +21,17 @@ config SND_SAMSUNG_SPDIF
+ config SND_SAMSUNG_I2S
+ 	tristate "Samsung I2S interface support"
+ 
++config SND_SOC_EXYNOS7880_AUDMIXER
++	tristate "Exynos7880 audio mixer"
++	depends on ARCH_EXYNOS || COMPILE_TEST
++	select MFD_SYSCON
++	select RESET_CONTROLLER
++	help
++	  Say Y or M to bring up the audio mixer that sits between the I2S
++	  block and the codec in the audio subsystem of the Exynos7880. It
++	  resets and routes the mixer for one path, 48 kHz stereo from the
++	  I2S to the codec, and releases the retention of the audio pads.
++
+ config SND_SOC_SAMSUNG_SMDK_WM8994
+ 	tristate "SoC I2S Audio support for WM8994 on SMDK"
+ 	depends on I2C=y
+diff --git a/sound/soc/samsung/Makefile b/sound/soc/samsung/Makefile
+index 8d5f09147..b4965da5a 100644
+--- a/sound/soc/samsung/Makefile
++++ b/sound/soc/samsung/Makefile
+@@ -42,3 +42,6 @@ obj-$(CONFIG_SND_SOC_ARNDALE) += snd-soc-arndale.o
+ obj-$(CONFIG_SND_SOC_SAMSUNG_TM2_WM5110) += snd-soc-tm2-wm5110.o
+ obj-$(CONFIG_SND_SOC_SAMSUNG_ARIES_WM8994) += snd-soc-aries-wm8994.o
+ obj-$(CONFIG_SND_SOC_SAMSUNG_MIDAS_WM1811) += snd-soc-midas-wm1811.o
++
++snd-soc-exynos7880-audmixer-y := exynos7880-audmixer.o
++obj-$(CONFIG_SND_SOC_EXYNOS7880_AUDMIXER) += snd-soc-exynos7880-audmixer.o
+diff --git a/sound/soc/samsung/exynos7880-audmixer.c b/sound/soc/samsung/exynos7880-audmixer.c
+new file mode 100644
+index 000000000..4811d4845
+--- /dev/null
++++ b/sound/soc/samsung/exynos7880-audmixer.c
+@@ -0,0 +1,192 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Audio mixer of the Exynos7880 audio subsystem
++ *
++ * The mixer sits between the SoC I2S block and the codec. The I2S audio of the
++ * application processor goes in at input 1, through a sample rate converter and
++ * the digital mixer, and out to the codec, together with the bit clock, frame
++ * clock and master clock of the codec. This driver brings the block up for that
++ * one path (48 kHz, 16 bit, stereo) and releases the retention of the audio
++ * pads; it has no runtime controls yet.
++ */
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/mfd/syscon.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++#include <linux/reset.h>
++
++/* the registers are 32 bits wide, on a stride of 4 */
++#define MIXER_REG(n)		((n) * 4)
++
++#define MIXER_SOFT_RSTB		MIXER_REG(0x00)
++#define  SOFT_RSTB_SYS		BIT(0)
++#define  SOFT_RSTB_DATA		BIT(1)
++#define MIXER_IN1_CTL2		MIXER_REG(0x02)
++#define MIXER_IN2_CTL2		MIXER_REG(0x05)
++#define MIXER_IN3_CTL1		MIXER_REG(0x07)
++#define MIXER_IN3_CTL2		MIXER_REG(0x08)
++#define MIXER_IN3_CTL3		MIXER_REG(0x09)
++#define MIXER_HQ_CTL		MIXER_REG(0x0a)
++#define  HQ_CTL_MCKO_EN		BIT(2)
++#define MIXER_SLOT_L		MIXER_REG(0x0b)
++#define MIXER_SLOT_R		MIXER_REG(0x0c)
++#define MIXER_TSLOT		MIXER_REG(0x0e)
++#define MIXER_DIG_EN		MIXER_REG(0x0f)
++#define  DIG_EN_SRC1		BIT(0)
++#define  DIG_EN_MIX		BIT(3)
++#define MIXER_DMIX1		MIXER_REG(0x10)
++#define  DMIX1_CH1_EN		BIT(3)
++#define MIXER_INAMP_CTL		MIXER_REG(0x18)
++#define MIXER_OUTAP1_CTL	MIXER_REG(0x19)
++#define MIXER_OUTCP1_CTL	MIXER_REG(0x1a)
++
++/* power management unit: release of the retention of the audio pads */
++#define PMU_GPIO_MODE_AUD_SYS_PWR	0x1340
++#define PMU_PAD_RETENTION_AUD_OPTION	0x3028
++#define  PAD_RETENTION_AUD_RELEASE	BIT(28)
++
++struct audmixer {
++	void __iomem *base;
++};
++
++static void audmixer_write(struct audmixer *am, unsigned int reg, u32 val)
++{
++	writel(val, am->base + reg);
++}
++
++static int audmixer_set_clock_divider(struct device *dev)
++{
++	struct of_phandle_args args;
++	struct regmap *map;
++	int ret;
++
++	ret = of_parse_phandle_with_fixed_args(dev->of_node, "samsung,clk-div",
++					       2, 0, &args);
++	if (ret)
++		return ret;
++
++	map = syscon_node_to_regmap(args.np);
++	of_node_put(args.np);
++	if (IS_ERR(map))
++		return PTR_ERR(map);
++
++	/* 98.304 MHz divided by four is the 24.576 MHz of 48 kHz audio */
++	return regmap_write(map, args.args[0], args.args[1]);
++}
++
++static int audmixer_release_pads(struct device *dev)
++{
++	struct regmap *pmu;
++	int ret;
++
++	pmu = syscon_regmap_lookup_by_phandle(dev->of_node, "samsung,pmu");
++	if (IS_ERR(pmu))
++		return PTR_ERR(pmu);
++
++	ret = regmap_update_bits(pmu, PMU_PAD_RETENTION_AUD_OPTION,
++				 PAD_RETENTION_AUD_RELEASE,
++				 PAD_RETENTION_AUD_RELEASE);
++	if (ret)
++		return ret;
++
++	return regmap_update_bits(pmu, PMU_GPIO_MODE_AUD_SYS_PWR, BIT(0), BIT(0));
++}
++
++static void audmixer_setup(struct audmixer *am)
++{
++	/* system and data reset, as after power on */
++	audmixer_write(am, MIXER_SOFT_RSTB, 0);
++	usleep_range(1000, 2000);
++	audmixer_write(am, MIXER_SOFT_RSTB, SOFT_RSTB_SYS | SOFT_RSTB_DATA);
++	usleep_range(1000, 2000);
++
++	/* inputs: I2S, 32 x fs bit clock, 16 bit data, left channel first */
++	audmixer_write(am, MIXER_IN1_CTL2, 0x00);
++	audmixer_write(am, MIXER_IN2_CTL2, 0x00);
++	audmixer_write(am, MIXER_IN3_CTL1, 0x04);
++	audmixer_write(am, MIXER_IN3_CTL2, 0x00);
++	audmixer_write(am, MIXER_IN3_CTL3, 0x24);
++	audmixer_write(am, MIXER_SLOT_L, 0x01);
++	audmixer_write(am, MIXER_SLOT_R, 0x02);
++	audmixer_write(am, MIXER_TSLOT, 0x01);
++
++	/* the amplifier interfaces: formats of the two interface blocks */
++	audmixer_write(am, MIXER_INAMP_CTL, 0x2a);
++	audmixer_write(am, MIXER_OUTAP1_CTL, 0x00);
++	audmixer_write(am, MIXER_OUTCP1_CTL, 0x00);
++
++	/* master clock output for the codec, digital mixer on */
++	audmixer_write(am, MIXER_HQ_CTL, HQ_CTL_MCKO_EN);
++	audmixer_write(am, MIXER_DIG_EN, DIG_EN_MIX);
++
++	/* data path reset after the setup */
++	audmixer_write(am, MIXER_SOFT_RSTB, SOFT_RSTB_SYS);
++	audmixer_write(am, MIXER_SOFT_RSTB, SOFT_RSTB_SYS | SOFT_RSTB_DATA);
++
++	/* route input 1 (the application processor) to the output: sample rate
++	 * converter 1 and channel 1 of the digital mixer; the output selection
++	 * already defaults to the mixer output
++	 */
++	audmixer_write(am, MIXER_DIG_EN, DIG_EN_MIX | DIG_EN_SRC1);
++	audmixer_write(am, MIXER_DMIX1, DMIX1_CH1_EN);
++}
++
++static int audmixer_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct reset_control *rst;
++	struct audmixer *am;
++	int ret;
++
++	am = devm_kzalloc(dev, sizeof(*am), GFP_KERNEL);
++	if (!am)
++		return -ENOMEM;
++
++	am->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(am->base))
++		return PTR_ERR(am->base);
++
++	rst = devm_reset_control_get_exclusive(dev, NULL);
++	if (IS_ERR(rst))
++		return dev_err_probe(dev, PTR_ERR(rst), "no reset\n");
++
++	/* deasserting the reset of this controller pulses it first */
++	ret = reset_control_deassert(rst);
++	if (ret)
++		return dev_err_probe(dev, ret, "reset failed\n");
++
++	ret = audmixer_set_clock_divider(dev);
++	if (ret)
++		return dev_err_probe(dev, ret, "no clock divider\n");
++
++	ret = audmixer_release_pads(dev);
++	if (ret)
++		return dev_err_probe(dev, ret, "no pad retention release\n");
++
++	audmixer_setup(am);
++
++	dev_info(dev, "audio mixer routes the I2S input to the codec\n");
++
++	return 0;
++}
++
++static const struct of_device_id audmixer_of_match[] = {
++	{ .compatible = "samsung,exynos7880-audmixer" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, audmixer_of_match);
++
++static struct platform_driver audmixer_driver = {
++	.probe = audmixer_probe,
++	.driver = {
++		.name = "exynos7880-audmixer",
++		.of_match_table = audmixer_of_match,
++	},
++};
++module_platform_driver(audmixer_driver);
++
++MODULE_DESCRIPTION("Exynos7880 audio mixer");
++MODULE_LICENSE("GPL");
+-- 
+2.43.0
+
